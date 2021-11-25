@@ -66,7 +66,7 @@ func New(github *github.Client, hostname string, owner string, repo string, doma
 	return s
 }
 
-func (s *Server) Start(address string, config *tls.Config) (err error) {
+func (s *Server) Start(address string, config *tls.Config, tlsOverride bool) (err error) {
 	s.template = fasttemplate.New(embed.Shell, embed.StartTag, embed.EndTag)
 	s.cache, err = cache.New(s.github, s.owner, s.repo)
 	if err != nil {
@@ -81,8 +81,12 @@ func (s *Server) Start(address string, config *tls.Config) (err error) {
 	s.prefix = "http"
 	if config != nil {
 		listener = tls.NewListener(listener, config)
+	}
+
+	if config != nil || tlsOverride {
 		s.prefix = "https"
 	}
+
 	log.Printf("Starting server on %s://%s (domain %s)", s.prefix, address, s.domain)
 	return s.app.Listener(listener)
 }

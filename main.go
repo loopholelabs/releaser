@@ -37,6 +37,7 @@ var hostname string
 var address string
 var domain string
 var binary string
+var tls bool
 
 func main() {
 	defaultHostname, err := os.Hostname()
@@ -51,6 +52,7 @@ func main() {
 	flag.StringVar(&address, "address", "0.0.0.0:8080", "Listen Address for this Server")
 	flag.StringVar(&domain, "domain", "localhost", "Domain Name for this Server")
 	flag.StringVar(&binary, "binary", "bin", "Binary name to install")
+	flag.BoolVar(&tls, "TLS", false, "Override whether TLS is enabled")
 
 	flag.Parse()
 
@@ -99,7 +101,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err = s.Start(address, nil)
+		err = s.Start(address, nil, tls)
 		if err != nil {
 			panic(err)
 		}

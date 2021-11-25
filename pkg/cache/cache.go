@@ -64,7 +64,7 @@ func New(client *github.Client, owner string, repo string) (*Cache, error) {
 
 func (c *Cache) GetVersions() (versions []string) {
 	c.mu.RLock()
-	for version, _ := range c.versions {
+	for version := range c.versions {
 		versions = append(versions, version)
 	}
 	c.mu.RUnlock()
@@ -230,7 +230,7 @@ func (c *Cache) update() error {
 	c.checksums = updatedChecksums
 	c.mu.Unlock()
 
-	log.Printf("Done updating cache in %s", time.Now().Sub(start))
+	log.Printf("Done updating cache in %s", time.Since(start))
 
 	return nil
 }

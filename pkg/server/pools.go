@@ -22,15 +22,15 @@ import (
 
 var versionsResponsePool sync.Pool
 
-func getVersionsResponse() *versionsResponse {
+func getVersionsResponse() *VersionsResponse {
 	r := versionsResponsePool.Get()
 	if r == nil {
-		r = new(versionsResponse)
+		r = new(VersionsResponse)
 	}
-	return r.(*versionsResponse)
+	return r.(*VersionsResponse)
 }
 
-func putVersionsResponse(r *versionsResponse) {
+func putVersionsResponse(r *VersionsResponse) {
 	r.Versions = nil
 	versionsResponsePool.Put(r)
 }

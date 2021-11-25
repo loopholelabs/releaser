@@ -16,6 +16,6 @@
 
 package server
 
-type versionsResponse struct {
+type VersionsResponse struct {
 	Versions []string `json:"versions"`
 }

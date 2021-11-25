@@ -100,9 +100,9 @@ func (s *Server) init() {
 
 	s.app.Get("/", s.GetRoot)
 	s.app.Get("/ping", s.GetPing)
-	s.app.Get("/releases", s.GetReleases)
-	s.app.Get("/:version", s.GetRelease)
-	s.app.Get("/release/:version/:os/:arch", s.GetSpecificRelease)
+	s.app.Get("/versions", s.GetVersions)
+	s.app.Get("/:version", s.GetVersion)
+	s.app.Get("/:version/:os/:arch", s.GetBinary)
 }
 
 func (s *Server) GetRoot(ctx *fiber.Ctx) error {
@@ -124,14 +124,14 @@ func (s *Server) GetPing(ctx *fiber.Ctx) error {
 	return ctx.SendStatus(fiber.StatusOK)
 }
 
-func (s *Server) GetReleases(ctx *fiber.Ctx) error {
+func (s *Server) GetVersions(ctx *fiber.Ctx) error {
 	res := getVersionsResponse()
 	defer putVersionsResponse(res)
 	res.Versions = s.cache.GetVersions()
 	return ctx.JSON(res)
 }
 
-func (s *Server) GetRelease(ctx *fiber.Ctx) error {
+func (s *Server) GetVersion(ctx *fiber.Ctx) error {
 	version := ctx.Params("version")
 
 	if !s.cache.GetVersion(version) {
@@ -147,7 +147,7 @@ func (s *Server) GetRelease(ctx *fiber.Ctx) error {
 	}))
 }
 
-func (s *Server) GetSpecificRelease(ctx *fiber.Ctx) error {
+func (s *Server) GetBinary(ctx *fiber.Ctx) error {
 	version := ctx.Params("version")
 	os := ctx.Params("os")
 	arch := ctx.Params("arch")

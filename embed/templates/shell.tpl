@@ -170,7 +170,7 @@ start() {
 
   echo
   log_info "Downloading Version $version for $os $arch"
-  http_download $tmp "$prefix://$domain/release/$version/$os/$arch"
+  http_download $tmp "$prefix://$domain/$version/$os/$arch"
 
   if [ -w "$install" ]; then
   log_info "Installing $binary to $install"

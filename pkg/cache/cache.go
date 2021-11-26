@@ -17,7 +17,10 @@
 package cache
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"github.com/google/go-github/v40/github"
 	"io"
@@ -38,7 +41,7 @@ type Cache struct {
 	mu        sync.RWMutex
 	versions  map[string]string
 	releases  map[releaseKey][]byte
-	checksums map[string][]byte
+	checksums map[releaseKey]string
 
 	close chan struct{}
 	wg    sync.WaitGroup
@@ -52,7 +55,7 @@ func New(client *github.Client, owner string, repo string) (*Cache, error) {
 	c := &Cache{
 		versions:  make(map[string]string),
 		releases:  make(map[releaseKey][]byte),
-		checksums: make(map[string][]byte),
+		checksums: make(map[releaseKey]string),
 		close:     make(chan struct{}, 1),
 		owner:     owner,
 		repo:      repo,
@@ -78,13 +81,23 @@ func (c *Cache) GetVersion(version string) bool {
 	return ok
 }
 
-func (c *Cache) GetChecksum(version string) ([]byte, bool) {
+func (c *Cache) GetChecksum(version string, os string, arch string) (string, bool) {
+	if !c.GetVersion(version) {
+		return "", false
+	}
+
+	key := releaseKey{
+		Version: version,
+		OS:      os,
+		Arch:    arch,
+	}
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if assetBytes, ok := c.checksums[version]; !ok {
-		return nil, false
+	if checksum, ok := c.checksums[key]; !ok {
+		return "", false
 	} else {
-		return assetBytes, true
+		return checksum, true
 	}
 }
 
@@ -150,7 +163,7 @@ func (c *Cache) update() error {
 	log.Printf("Found %d new releases, keeping %d existing releases", len(releasesToUpdate), len(releasesToKeep))
 
 	updatedReleases := make(map[releaseKey][]byte)
-	updatedChecksums := make(map[string][]byte)
+	updatedChecksums := make(map[releaseKey]string)
 
 	if len(releasesToUpdate) > 0 {
 		for _, release := range releasesToUpdate {
@@ -182,14 +195,51 @@ func (c *Cache) update() error {
 							OS:      split[2],
 							Arch:    strings.Join(split[3:], "_"),
 						}
+
+						if checksum, ok := updatedChecksums[key]; ok {
+							computedChecksum := sha256.Sum256(assetBytes)
+							if stringComputedChecksum := fmt.Sprintf("%x", computedChecksum); stringComputedChecksum != checksum {
+								log.Printf("Invalid checksum '%s' for asset with version: %s, os: %s, arch: %s (stored checksum %s)", stringComputedChecksum, key.Version, key.OS, key.Arch, checksum)
+								continue
+							} else {
+								log.Printf("Valid checksum '%s' for asset with version: %s, os: %s, arch: %s", stringComputedChecksum, key.Version, key.OS, key.Arch)
+							}
+						} else {
+							log.Printf("Unable to find stored checksum for asset with version: %s, os: %s, arch: %s, will ignore", key.Version, key.OS, key.Arch)
+						}
+
 						updatedReleases[key] = assetBytes
 						log.Printf("Downloaded asset with version: %s, os: %s, arch: %s (%d bytes)", key.Version, key.OS, key.Arch, len(assetBytes))
 					} else {
 						log.Printf("Ignoring asset %s for version %s", assetName, releaseName)
 					}
 				} else if assetName == "checksums.txt" {
-					updatedChecksums[releaseName] = assetBytes
-					log.Printf("Downloaded checksum for version: %s (%d bytes)", releaseName, len(assetBytes))
+					bytesReader := bytes.NewReader(assetBytes)
+					bufioReader := bufio.NewReader(bytesReader)
+					for {
+						line, err := bufioReader.ReadString(byte('\n'))
+						if err != nil {
+							break
+						}
+						checksumLine := strings.Split(strings.TrimSpace(line), "  ")
+						if len(checksumLine) > 1 && strings.HasSuffix(checksumLine[1], ".tar.gz") {
+							trimmed := strings.TrimSuffix(checksumLine[1], ".tar.gz")
+							split := strings.Split(trimmed, "_")
+							if len(split) > 2 {
+								key := releaseKey{
+									Version: releaseName,
+									OS:      split[2],
+									Arch:    strings.Join(split[3:], "_"),
+								}
+								updatedChecksums[key] = checksumLine[0]
+								log.Printf("Added checksum for asset with version: %s, os: %s, arch: %s (checksum %s)", key.Version, key.OS, key.Arch, checksumLine[0])
+							} else {
+								log.Printf("Ignoring checksum for asset %s for version %s", checksumLine[1], releaseName)
+							}
+						} else {
+							log.Printf("Ignoring checksum line %s for version %s", checksumLine, releaseName)
+						}
+					}
 				} else {
 					log.Printf("Ignoring asset %s for version %s", assetName, releaseName)
 				}
@@ -214,18 +264,17 @@ func (c *Cache) update() error {
 					if assetBytes, ok := c.releases[key]; ok {
 						updatedReleases[key] = assetBytes
 						log.Printf("Keeping asset with version: %s, os: %s, arch: %s (%d bytes)", key.Version, key.OS, key.Arch, len(assetBytes))
+						if checksum, ok := c.checksums[key]; ok {
+							updatedChecksums[key] = checksum
+							log.Printf("Keeping checksum for asset with version: %s, os: %s, arch: %s (checksum %s)", key.Version, key.OS, key.Arch, checksum)
+						} else {
+							log.Printf("Lost checksum for asset with version: %s, os: %s, arch: %s", key.Version, key.OS, key.Arch)
+						}
 					} else {
-						log.Printf("Lost asset %s for version %s", assetName, releaseName)
+						log.Printf("Lost asset and checksum %s for version %s", assetName, releaseName)
 					}
 				} else {
 					log.Printf("Ignoring asset %s for version %s", assetName, releaseName)
-				}
-			} else if assetName == "checksums.txt" {
-				if assetBytes, ok := c.checksums[releaseName]; ok {
-					updatedChecksums[releaseName] = assetBytes
-					log.Printf("Keeping checksum for version: %s (%d bytes)", releaseName, len(assetBytes))
-				} else {
-					log.Printf("Lost checksum for version %s", releaseName)
 				}
 			} else {
 				log.Printf("Ignoring asset %s for version %s", assetName, releaseName)

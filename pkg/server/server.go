@@ -102,6 +102,7 @@ func (s *Server) init() {
 	s.app.Get("/ping", s.GetPing)
 	s.app.Get("/versions", s.GetVersions)
 	s.app.Get("/:version", s.GetVersion)
+	s.app.Get("/checksum/:version", s.GetChecksum)
 	s.app.Get("/:version/:os/:arch", s.GetBinary)
 }
 
@@ -145,6 +146,19 @@ func (s *Server) GetVersion(ctx *fiber.Ctx) error {
 		"prefix":  s.prefix,
 		"binary":  s.binary,
 	}))
+}
+
+func (s *Server) GetChecksum(ctx *fiber.Ctx) error {
+	version := ctx.Params("version")
+
+	asset, ok := s.cache.GetChecksum(version)
+	if !ok {
+		return ctx.Status(fiber.StatusNotFound).SendString("checksum does not exist")
+	}
+
+	ctx.Response().Header.SetContentType(fiber.MIMEOctetStream)
+	ctx.Response().SetBody(asset)
+	return nil
 }
 
 func (s *Server) GetBinary(ctx *fiber.Ctx) error {

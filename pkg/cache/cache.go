@@ -78,6 +78,16 @@ func (c *Cache) GetVersion(version string) bool {
 	return ok
 }
 
+func (c *Cache) GetChecksum(version string) ([]byte, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if assetBytes, ok := c.checksums[version]; !ok {
+		return nil, false
+	} else {
+		return assetBytes, true
+	}
+}
+
 func (c *Cache) GetRelease(version string, os string, arch string) ([]byte, bool) {
 	if !c.GetVersion(version) {
 		return nil, false

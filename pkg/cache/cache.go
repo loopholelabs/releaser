@@ -231,6 +231,7 @@ func (c *Cache) update() error {
 						}
 					}
 				} else if strings.HasSuffix(assetName, ".tar.gz") {
+					log.Printf("Starting Goroutine to download %s for version %s", assetName, releaseName)
 					wg.Add(1)
 					go func() {
 						defer wg.Done()

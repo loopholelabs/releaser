@@ -129,7 +129,7 @@ func (c *Cache) GetRelease(version string, os string, arch string) ([]byte, bool
 }
 
 func (c *Cache) init() error {
-	log.Printf("Starting initial update of cache")
+	log.Printf("Doing initial update of cache")
 	err := c.update()
 	if err != nil {
 		log.Printf("Error during initial update of cache: %s", err)
@@ -173,58 +173,35 @@ func (c *Cache) update() error {
 	c.mu.RUnlock()
 	log.Printf("Found %d new releases, keeping %d existing releases (latest %s)", len(releasesToUpdate), len(releasesToKeep), latest)
 
+	updateMu := new(sync.Mutex)
 	updatedReleases := make(map[releaseKey][]byte)
 	updatedChecksums := make(map[releaseKey]string)
 
 	if len(releasesToUpdate) > 0 {
+		var wg sync.WaitGroup
 		for _, release := range releasesToUpdate {
-			releaseName := strings.ToLower(*release.Name)
+			releaseName := strings.ToLower(release.GetName())
 			for _, asset := range release.Assets {
-				assetName := strings.ToLower(*asset.Name)
-				deadline, cancel = context.WithDeadline(context.Background(), time.Now().Add(time.Second*30))
-				assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.owner, c.repo, *asset.ID, http.DefaultClient)
-				if err != nil {
-					_ = assetReader.Close()
-					cancel()
-					return err
-				}
+				assetID := asset.GetID()
+				assetName := strings.ToLower(asset.GetName())
 
-				assetBytes, err := io.ReadAll(assetReader)
-				if err != nil {
-					_ = assetReader.Close()
-					cancel()
-					return err
-				}
-				cancel()
-
-				if strings.HasSuffix(assetName, ".tar.gz") {
-					trimmed := strings.TrimSuffix(assetName, ".tar.gz")
-					split := strings.Split(trimmed, "_")
-					if len(split) > 2 {
-						key := releaseKey{
-							Version: releaseName,
-							OS:      split[2],
-							Arch:    strings.Join(split[3:], "_"),
-						}
-
-						if checksum, ok := updatedChecksums[key]; ok {
-							computedChecksum := sha256.Sum256(assetBytes)
-							if stringComputedChecksum := fmt.Sprintf("%x", computedChecksum); stringComputedChecksum != checksum {
-								log.Printf("Invalid checksum '%s' for asset with version: %s, os: %s, arch: %s (stored checksum %s)", stringComputedChecksum, key.Version, key.OS, key.Arch, checksum)
-								continue
-							} else {
-								log.Printf("Valid checksum '%s' for asset with version: %s, os: %s, arch: %s", stringComputedChecksum, key.Version, key.OS, key.Arch)
-							}
-						} else {
-							log.Printf("Unable to find stored checksum for asset with version: %s, os: %s, arch: %s, will ignore", key.Version, key.OS, key.Arch)
-						}
-
-						updatedReleases[key] = assetBytes
-						log.Printf("Downloaded asset with version: %s, os: %s, arch: %s (%d bytes)", key.Version, key.OS, key.Arch, len(assetBytes))
-					} else {
-						log.Printf("Ignoring asset %s for version %s", assetName, releaseName)
+				if assetName == "checksums.txt" {
+					deadline, cancel = context.WithDeadline(context.Background(), time.Now().Add(time.Second*30))
+					assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.owner, c.repo, assetID, http.DefaultClient)
+					if err != nil {
+						_ = assetReader.Close()
+						cancel()
+						return err
 					}
-				} else if assetName == "checksums.txt" {
+
+					assetBytes, err := io.ReadAll(assetReader)
+					if err != nil {
+						_ = assetReader.Close()
+						cancel()
+						return err
+					}
+					cancel()
+
 					bytesReader := bytes.NewReader(assetBytes)
 					bufioReader := bufio.NewReader(bytesReader)
 					for {
@@ -242,7 +219,9 @@ func (c *Cache) update() error {
 									OS:      split[2],
 									Arch:    strings.Join(split[3:], "_"),
 								}
+								updateMu.Lock()
 								updatedChecksums[key] = checksumLine[0]
+								updateMu.Unlock()
 								log.Printf("Added checksum for asset with version: %s, os: %s, arch: %s (checksum %s)", key.Version, key.OS, key.Arch, checksumLine[0])
 							} else {
 								log.Printf("Ignoring checksum for asset %s for version %s", checksumLine[1], releaseName)
@@ -251,11 +230,63 @@ func (c *Cache) update() error {
 							log.Printf("Ignoring checksum line %s for version %s", checksumLine, releaseName)
 						}
 					}
+				} else if strings.HasSuffix(assetName, ".tar.gz") {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						deadline, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Second*30))
+						assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.owner, c.repo, assetID, http.DefaultClient)
+						if err != nil {
+							_ = assetReader.Close()
+							cancel()
+							log.Printf("Unable to download release asset %s for version %s due to error %s", assetName, releaseName, err)
+							return
+						}
+
+						assetBytes, err := io.ReadAll(assetReader)
+						if err != nil {
+							_ = assetReader.Close()
+							cancel()
+							log.Printf("Unable to download release asset %s for version %s due to error %s", assetName, releaseName, err)
+							return
+						}
+						cancel()
+
+						trimmed := strings.TrimSuffix(assetName, ".tar.gz")
+						split := strings.Split(trimmed, "_")
+						if len(split) > 2 {
+							key := releaseKey{
+								Version: releaseName,
+								OS:      split[2],
+								Arch:    strings.Join(split[3:], "_"),
+							}
+
+							updateMu.Lock()
+							if checksum, ok := updatedChecksums[key]; ok {
+								computedChecksum := sha256.Sum256(assetBytes)
+								if stringComputedChecksum := fmt.Sprintf("%x", computedChecksum); stringComputedChecksum != checksum {
+									log.Printf("Invalid checksum '%s' for asset with version: %s, os: %s, arch: %s (stored checksum %s)", stringComputedChecksum, key.Version, key.OS, key.Arch, checksum)
+									updateMu.Unlock()
+									return
+								} else {
+									log.Printf("Valid checksum '%s' for asset with version: %s, os: %s, arch: %s", stringComputedChecksum, key.Version, key.OS, key.Arch)
+								}
+							} else {
+								log.Printf("Unable to find stored checksum for asset with version: %s, os: %s, arch: %s, will ignore", key.Version, key.OS, key.Arch)
+							}
+							updatedReleases[key] = assetBytes
+							updateMu.Unlock()
+							log.Printf("Downloaded asset with version: %s, os: %s, arch: %s (%d bytes)", key.Version, key.OS, key.Arch, len(assetBytes))
+						} else {
+							log.Printf("Ignoring asset %s for version %s", assetName, releaseName)
+						}
+					}()
 				} else {
 					log.Printf("Ignoring asset %s for version %s", assetName, releaseName)
 				}
 			}
 		}
+		wg.Wait()
 	}
 
 	c.mu.RLock()

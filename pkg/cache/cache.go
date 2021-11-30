@@ -129,16 +129,8 @@ func (c *Cache) GetRelease(version string, os string, arch string) ([]byte, bool
 }
 
 func (c *Cache) init() error {
-	log.Printf("Doing initial update of cache")
-	err := c.update()
-	if err != nil {
-		log.Printf("Error during initial update of cache: %s", err)
-		return err
-	}
-
 	c.wg.Add(1)
 	go c.updater()
-
 	return nil
 }
 
@@ -339,8 +331,18 @@ func (c *Cache) update() error {
 }
 
 func (c *Cache) updater() {
+	defer c.wg.Done()
+
+	log.Printf("Doing initial update of cache")
+	err := c.update()
+	if err != nil {
+		log.Printf("Error during initial update of cache: %s", err)
+		panic(err)
+	}
+
 	timer := time.NewTimer(time.Minute)
-	defer func() { timer.Stop(); c.wg.Done() }()
+	defer timer.Stop()
+
 	for {
 		select {
 		case <-c.close:

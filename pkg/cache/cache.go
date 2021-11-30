@@ -129,7 +129,7 @@ func (c *Cache) GetRelease(version string, os string, arch string) ([]byte, bool
 }
 
 func (c *Cache) init() error {
-	log.Printf("Doing initial update of cache")
+	log.Printf("Starting initial update of cache")
 	err := c.update()
 	if err != nil {
 		log.Printf("Error during initial update of cache: %s", err)

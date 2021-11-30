@@ -22,11 +22,24 @@ import (
 	"github.com/gofiber/helmet/v2"
 	"github.com/google/go-github/v40/github"
 	"github.com/loopholelabs/releaser/embed"
+	"github.com/loopholelabs/releaser/internal/utils"
 	"github.com/loopholelabs/releaser/pkg/cache"
 	"github.com/valyala/fasttemplate"
 	"log"
 	"net"
 	"time"
+)
+
+const (
+	RootPath     = "/"
+	PingPath     = "/ping"
+	LatestPath   = "/latest"
+	VersionsPath = "/versions"
+	ChecksumPath = "/checksum"
+
+	VersionArgPath = "/:version"
+	OSArgPath      = "/:os"
+	ArchArgPath    = "/:arch"
 )
 
 type Server struct {
@@ -98,24 +111,25 @@ func (s *Server) Stop() error {
 func (s *Server) init() {
 	s.app.Use(helmet.New())
 
-	s.app.Get("/", s.GetRoot)
-	s.app.Get("/ping", s.GetPing)
-	s.app.Get("/versions", s.GetVersions)
-	s.app.Get("/:version", s.GetVersion)
-	s.app.Get("/checksum/:version/:os/:arch", s.GetChecksum)
-	s.app.Get("/:version/:os/:arch", s.GetBinary)
+	s.app.Get(RootPath, s.GetRoot)
+	s.app.Get(PingPath, s.GetPing)
+	s.app.Get(LatestPath, s.GetLatest)
+	s.app.Get(VersionsPath, s.GetVersions)
+	s.app.Get(VersionArgPath, s.GetVersion)
+	s.app.Get(utils.JoinStrings(VersionArgPath, OSArgPath, ArchArgPath), s.GetBinary)
+	s.app.Get(utils.JoinStrings(ChecksumPath, VersionArgPath, OSArgPath, ArchArgPath), s.GetChecksum)
 }
 
 func (s *Server) GetRoot(ctx *fiber.Ctx) error {
-	version := s.cache.GetLatest()
-	if len(version) == 0 {
+	latest := s.cache.GetLatest()
+	if len(latest) == 0 {
 		return ctx.Status(fiber.StatusInternalServerError).SendString("no releases available")
 	}
 
 	ctx.Response().Header.SetContentType(fiber.MIMEOctetStream)
 	return ctx.SendString(s.template.ExecuteString(map[string]interface{}{
 		"domain":  s.domain,
-		"version": version,
+		"version": latest,
 		"prefix":  s.prefix,
 		"binary":  s.binary,
 	}))
@@ -123,6 +137,14 @@ func (s *Server) GetRoot(ctx *fiber.Ctx) error {
 
 func (s *Server) GetPing(ctx *fiber.Ctx) error {
 	return ctx.SendStatus(fiber.StatusOK)
+}
+
+func (s *Server) GetLatest(ctx *fiber.Ctx) error {
+	latest := s.cache.GetLatest()
+	if len(latest) == 0 {
+		return ctx.Status(fiber.StatusInternalServerError).SendString("no releases available")
+	}
+	return ctx.SendString(latest)
 }
 
 func (s *Server) GetVersions(ctx *fiber.Ctx) error {

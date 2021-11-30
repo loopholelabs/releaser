@@ -42,6 +42,7 @@ type Cache struct {
 	versions  map[string]string
 	releases  map[releaseKey][]byte
 	checksums map[releaseKey]string
+	latest    string
 
 	close chan struct{}
 	wg    sync.WaitGroup
@@ -63,6 +64,12 @@ func New(client *github.Client, owner string, repo string) (*Cache, error) {
 	}
 
 	return c, c.init()
+}
+
+func (c *Cache) GetLatest() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.latest
 }
 
 func (c *Cache) GetVersions() (versions []string) {
@@ -148,8 +155,12 @@ func (c *Cache) update() error {
 	var releasesToUpdate []*github.RepositoryRelease
 	var releasesToKeep []*github.RepositoryRelease
 	updatedVersions := make(map[string]string)
+	var latest string
 
 	c.mu.RLock()
+	if len(releases) > 0 {
+		latest = strings.ToLower(*releases[0].Name)
+	}
 	for _, release := range releases {
 		releaseName := strings.ToLower(*release.Name)
 		updatedVersions[releaseName] = release.GetTargetCommitish()
@@ -160,7 +171,7 @@ func (c *Cache) update() error {
 		}
 	}
 	c.mu.RUnlock()
-	log.Printf("Found %d new releases, keeping %d existing releases", len(releasesToUpdate), len(releasesToKeep))
+	log.Printf("Found %d new releases, keeping %d existing releases (latest %s)", len(releasesToUpdate), len(releasesToKeep), latest)
 
 	updatedReleases := make(map[releaseKey][]byte)
 	updatedChecksums := make(map[releaseKey]string)
@@ -287,6 +298,7 @@ func (c *Cache) update() error {
 	c.versions = updatedVersions
 	c.releases = updatedReleases
 	c.checksums = updatedChecksums
+	c.latest = latest
 	c.mu.Unlock()
 
 	log.Printf("Done updating cache in %s", time.Since(start))

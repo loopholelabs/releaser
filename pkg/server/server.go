@@ -107,15 +107,15 @@ func (s *Server) init() {
 }
 
 func (s *Server) GetRoot(ctx *fiber.Ctx) error {
-	versions := s.cache.GetVersions()
-	if len(versions) == 0 {
+	version := s.cache.GetLatest()
+	if len(version) == 0 {
 		return ctx.Status(fiber.StatusInternalServerError).SendString("no releases available")
 	}
 
 	ctx.Response().Header.SetContentType(fiber.MIMEOctetStream)
 	return ctx.SendString(s.template.ExecuteString(map[string]interface{}{
 		"domain":  s.domain,
-		"version": versions[0],
+		"version": version,
 		"prefix":  s.prefix,
 		"binary":  s.binary,
 	}))

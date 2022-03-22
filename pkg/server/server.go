@@ -126,7 +126,7 @@ func (s *Server) GetRoot(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusInternalServerError).SendString("no releases available")
 	}
 
-	ctx.Response().Header.SetContentType(fiber.MIMEOctetStream)
+	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
 	return ctx.SendString(s.template.ExecuteString(map[string]interface{}{
 		"domain":  s.domain,
 		"version": latest,
@@ -144,6 +144,7 @@ func (s *Server) GetLatest(ctx *fiber.Ctx) error {
 	if len(latest) == 0 {
 		return ctx.Status(fiber.StatusInternalServerError).SendString("no releases available")
 	}
+	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
 	return ctx.SendString(latest)
 }
 
@@ -151,6 +152,7 @@ func (s *Server) GetVersions(ctx *fiber.Ctx) error {
 	res := getVersionsResponse()
 	defer putVersionsResponse(res)
 	res.Versions = s.cache.GetVersions()
+	ctx.Response().Header.SetContentType(fiber.MIMEApplicationJSONCharsetUTF8)
 	return ctx.JSON(res)
 }
 
@@ -161,7 +163,7 @@ func (s *Server) GetVersion(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusNotFound).SendString("version not available")
 	}
 
-	ctx.Response().Header.SetContentType(fiber.MIMEOctetStream)
+	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
 	return ctx.SendString(s.template.ExecuteString(map[string]interface{}{
 		"domain":  s.domain,
 		"version": version,
@@ -180,7 +182,7 @@ func (s *Server) GetChecksum(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusNotFound).SendString("checksum does not exist")
 	}
 
-	ctx.Response().Header.SetContentType(fiber.MIMETextPlain)
+	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
 	return ctx.SendString(checksum)
 }
 
@@ -194,7 +196,7 @@ func (s *Server) GetBinary(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusNotFound).SendString("release does not exist")
 	}
 
-	ctx.Response().Header.SetContentType(fiber.MIMEOctetStream)
+	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
 	ctx.Response().SetBody(asset)
 	return nil
 }

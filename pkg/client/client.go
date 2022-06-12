@@ -18,8 +18,9 @@ package client
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
-	"github.com/gofiber/fiber/v2"
+	"github.com/go-resty/resty/v2"
 	"github.com/loopholelabs/releaser/internal/utils"
 	"github.com/loopholelabs/releaser/pkg/server"
 	"github.com/pkg/errors"
@@ -33,78 +34,72 @@ var (
 )
 
 type Client struct {
-	base string
+	base   string
+	client *resty.Client
 }
 
 func New(base string) *Client {
 	return &Client{
-		base: base,
+		base:   base,
+		client: resty.New().SetBaseURL(base),
 	}
 }
 
 func (c *Client) GetVersions() (*server.VersionsResponse, error) {
-	a := getAgent()
-	defer putAgent(a)
-	err := configureAgent(a, fiber.MethodGet, utils.JoinStrings(c.base, server.VersionsPath))
+	req := c.client.NewRequest()
+	res, err := req.Get(server.VersionsPath)
 	if err != nil {
 		return nil, errors.Wrap(err, GetVersionsError.Error())
 	}
 
-	res := new(server.VersionsResponse)
-	code, body, errs := a.Struct(res)
-	if code != fiber.StatusOK {
-		return nil, utils.BodyError(errs, GetVersionsError, body)
+	if res.StatusCode() != 200 {
+		return nil, fmt.Errorf("invalid response status code: %d with body '%s'", res.StatusCode(), string(res.Body()))
 	}
 
-	return res, nil
+	val := new(server.VersionsResponse)
+	return val, json.Unmarshal(res.Body(), val)
 }
 
 func (c *Client) GetLatest() (string, error) {
-	a := getAgent()
-	defer putAgent(a)
-	err := configureAgent(a, fiber.MethodGet, utils.JoinStrings(c.base, server.LatestPath))
+	req := c.client.NewRequest()
+	res, err := req.Get(server.LatestPath)
 	if err != nil {
 		return "", errors.Wrap(err, GetVersionsError.Error())
 	}
 
-	code, body, errs := a.Bytes()
-	if code != fiber.StatusOK {
-		return "", utils.BodyError(errs, GetVersionsError, body)
+	if res.StatusCode() != 200 {
+		return "", fmt.Errorf("invalid response status code: %d with body '%s'", res.StatusCode(), string(res.Body()))
 	}
 
-	return string(body), nil
+	return string(res.Body()), nil
 }
 
 func (c *Client) GetChecksum(version string) (string, error) {
-	a := getAgent()
-	defer putAgent(a)
-	err := configureAgent(a, fiber.MethodGet, utils.JoinStrings(c.base, utils.JoinPaths(server.ChecksumPath, version, runtime.GOOS, runtime.GOARCH)))
+	req := c.client.NewRequest()
+	res, err := req.Get(utils.JoinPaths(server.ChecksumPath, version, runtime.GOOS, runtime.GOARCH))
 	if err != nil {
 		return "", errors.Wrap(err, DownloadError.Error())
 	}
 
-	code, checksumBody, errs := a.Bytes()
-	if code != fiber.StatusOK {
-		return "", utils.BodyError(errs, DownloadError, checksumBody)
+	if res.StatusCode() != 200 {
+		return "", fmt.Errorf("invalid response status code: %d with body '%s'", res.StatusCode(), string(res.Body()))
 	}
 
-	return string(checksumBody), nil
+	return string(res.Body()), nil
 }
 
 func (c *Client) GetBinary(version string) ([]byte, error) {
-	a := getAgent()
-	defer putAgent(a)
-	err := configureAgent(a, fiber.MethodGet, utils.JoinStrings(c.base, utils.JoinPaths(version, runtime.GOOS, runtime.GOARCH)))
+	req := c.client.NewRequest()
+	res, err := req.Get(utils.JoinPaths(version, runtime.GOOS, runtime.GOARCH))
 	if err != nil {
 		return nil, errors.Wrap(err, DownloadError.Error())
 	}
 
-	code, body, errs := a.Bytes()
-	if code != fiber.StatusOK {
-		return nil, utils.BodyError(errs, DownloadError, body)
+	if res.StatusCode() != 200 {
+		return nil, fmt.Errorf("invalid response status code: %d with body '%s'", res.StatusCode(), string(res.Body()))
 	}
 
-	return body, nil
+	return res.Body(), nil
 }
 
 func (c *Client) DownloadVersion(version string) ([]byte, error) {

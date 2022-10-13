@@ -174,11 +174,11 @@ start() {
 
   if [ -w "$install" ]; then
   log_info "Installing $binary to $install"
-    tar -xf "$tmp" -C "$install"
+    tar -xf "$tmp" -O > "$install/$binary"
   else
     log_info "Permissions required for installation to $install — alternatively specify a new directory with:"
     log_info "  $ curl -fsSL $prefix://$domain/$version | INSTALL=. sh"
-    sudo tar -xf "$tmp" -C "$install"
+    sudo tar -xf "$tmp" -O > "$install/$binary"
   fi
 
   log_info "Installation complete"

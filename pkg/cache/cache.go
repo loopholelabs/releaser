@@ -181,14 +181,12 @@ func (c *Cache) update() error {
 					deadline, cancel = context.WithDeadline(context.Background(), time.Now().Add(time.Second*30))
 					assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.owner, c.repo, assetID, http.DefaultClient)
 					if err != nil {
-						_ = assetReader.Close()
 						cancel()
 						return err
 					}
 
 					assetBytes, err := io.ReadAll(assetReader)
 					if err != nil {
-						_ = assetReader.Close()
 						cancel()
 						return err
 					}
@@ -230,7 +228,6 @@ func (c *Cache) update() error {
 						deadline, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Second*30))
 						assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.owner, c.repo, assetID, http.DefaultClient)
 						if err != nil {
-							_ = assetReader.Close()
 							cancel()
 							log.Printf("Unable to download release asset %s for version %s due to error %s", assetName, releaseName, err)
 							return
@@ -238,7 +235,6 @@ func (c *Cache) update() error {
 
 						assetBytes, err := io.ReadAll(assetReader)
 						if err != nil {
-							_ = assetReader.Close()
 							cancel()
 							log.Printf("Unable to download release asset %s for version %s due to error %s", assetName, releaseName, err)
 							return

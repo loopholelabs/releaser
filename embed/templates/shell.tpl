@@ -173,14 +173,45 @@ start() {
   http_download $tmp "$prefix://$domain/$version/$os/$arch"
 
   if [ -w "$install" ]; then
-  log_info "Installing $binary to $install"
+    log_info "Installing $binary to $install"
     tar -xf "$tmp" -O > "$install/$binary"
     chmod +x "$install/$binary"
   else
-    log_info "Permissions required for installation to $install — alternatively specify a new directory with:"
+    otherInstall="$HOME/.config/$binary/bin"
+    mkdir -p "$otherInstall"
+    log_info "Permissions required for installation to $install, using $otherInstall instead — alternatively specify a new directory with:"
     log_info "  $ curl -fsSL $prefix://$domain/$version | INSTALL=. sh"
-    tar -xf "$tmp" -O | sudo tee "$install/$binary" > /dev/null
-    sudo chmod +x "$install/$binary"
+    tar -xf "$tmp" -O | tee "$otherInstall/$binary" > /dev/null
+    chmod +x "$otherInstall/$binary"
+    EXPORT_PATH="export PATH=\"\$PATH:$otherInstall\""
+    if [ -w "$HOME/.zshrc" ]; then
+        if ! grep -q "$EXPORT_PATH" "$HOME/.zshrc" ; then
+            log_info "Appending scale source string to ~/.zshrc"
+            echo "$EXPORT_PATH" >> "$HOME/.zshrc"
+            log_info "Please run 'source ~/.zshrc' to update your current shell or open a new one."
+        fi
+    elif [ -w "$HOME/.zprofile" ]; then
+        if ! grep -q "$EXPORT_PATH" "$HOME/.zprofile" ; then
+            log_info "Appending scale source string to ~/.zprofile"
+            echo "$EXPORT_PATH" >> "$HOME/.zprofile"
+            log_info "Please run 'source ~/.zprofile' to update your current shell or open a new one."
+        fi
+    elif [ -w "$HOME/.bashrc" ]; then
+        if ! grep -q "$EXPORT_PATH" "$HOME/.bashrc" ; then
+            log_info "Appending scale source string to ~/.bashrc"
+            echo "$EXPORT_PATH" >> "$HOME/.bashrc"
+            log_info "Please run 'source ~/.bashrc' to update your current shell or open a new one."
+        fi
+    elif [ -w "$HOME/.bash_profile" ]; then
+        if ! grep -q "$EXPORT_PATH" "$HOME/.bash_profile" ; then
+            log_info "Appending scale source string to ~/.bash_profile"
+            echo "$EXPORT_PATH" >> "$HOME/.bash_profile"
+            log_info "Please run 'source ~/.bash_profile' to update your current shell or open a new one."
+        fi
+    else
+        log_info "Please add the following to your shell profile:"
+        log_info "  $ $EXPORT_PATH"
+    fi
   fi
 
   log_info "Installation complete"

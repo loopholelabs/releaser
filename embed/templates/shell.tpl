@@ -177,7 +177,7 @@ start() {
     tar -xf "$tmp" -O > "$install/$binary"
     chmod +x "$install/$binary"
   else
-    otherInstall="$HOME/.config/scale"
+    otherInstall="$HOME/.config/$binary/bin"
     mkdir -p "$otherInstall"
     log_info "Permissions required for installation to $install, using $otherInstall instead — alternatively specify a new directory with:"
     log_info "  $ curl -fsSL $prefix://$domain/$version | INSTALL=. sh"

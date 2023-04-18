@@ -169,6 +169,10 @@ func (c *Cache) update() error {
 	updatedReleases := make(map[releaseKey][]byte)
 	updatedChecksums := make(map[releaseKey]string)
 
+	if len(releasesToUpdate) > 10 {
+		releasesToUpdate = releasesToUpdate[:10]
+	}
+
 	if len(releasesToUpdate) > 0 {
 		var wg sync.WaitGroup
 		for _, release := range releasesToUpdate {

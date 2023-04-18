@@ -189,25 +189,25 @@ start() {
             log_info "Appending scale source string to ~/.zshrc"
             echo "$EXPORT_PATH" >> "$HOME/.zshrc"
             log_info "Please run 'source ~/.zshrc' to update your current shell or open a new one."
-        end
+        fi
     elif [ -w "$HOME/.zprofile" ]; then
         if grep -q "$EXPORT_PATH" "$HOME/.zprofile" ; then
             log_info "Appending scale source string to ~/.zprofile"
             echo "$EXPORT_PATH" >> "$HOME/.zprofile"
             log_info "Please run 'source ~/.zprofile' to update your current shell or open a new one."
-        end
+        fi
     elif [ -w "$HOME/.bashrc" ]; then
         if grep -q "$EXPORT_PATH" "$HOME/.bashrc" ; then
             log_info "Appending scale source string to ~/.bashrc"
             echo "$EXPORT_PATH" >> "$HOME/.bashrc"
             log_info "Please run 'source ~/.bashrc' to update your current shell or open a new one."
-        end
+        fi
     elif [ -w "$HOME/.bash_profile" ]; then
         if grep -q "$EXPORT_PATH" "$HOME/.bash_profile" ; then
             log_info "Appending scale source string to ~/.bash_profile"
             echo "$EXPORT_PATH" >> "$HOME/.bash_profile"
             log_info "Please run 'source ~/.bash_profile' to update your current shell or open a new one."
-        end
+        fi
     else
         log_info "Please add the following to your shell profile:"
         log_info "  $ $EXPORT_PATH"

@@ -162,6 +162,7 @@ func (s *Server) GetReleaseShellScript(ctx *fiber.Ctx) error {
 
 // GetLatestReleaseName returns the name of the latest release
 func (s *Server) GetLatestReleaseName(ctx *fiber.Ctx) error {
+	analytics.Event("latest_release_name")
 	latestReleaseName := s.cache.GetLatestReleaseName()
 	if len(latestReleaseName) == 0 {
 		return ctx.Status(fiber.StatusInternalServerError).SendString("no releases available")
@@ -172,6 +173,7 @@ func (s *Server) GetLatestReleaseName(ctx *fiber.Ctx) error {
 
 // ListReleaseNames returns a list of all available release names
 func (s *Server) ListReleaseNames(ctx *fiber.Ctx) error {
+	analytics.Event("list_release_names")
 	res := getListReleaseNamesResponse()
 	defer putListReleaseNamesResponse(res)
 	res.ReleaseNames = s.cache.GetAllReleaseNames()
@@ -184,6 +186,12 @@ func (s *Server) GetChecksum(ctx *fiber.Ctx) error {
 	releaseName := ctx.Params("release_name")
 	os := ctx.Params("os")
 	arch := ctx.Params("arch")
+
+	analytics.Event("checksum", map[string]string{
+		"release_name": releaseName,
+		"os":           os,
+		"arch":         arch,
+	})
 
 	checksum := s.cache.GetChecksum(releaseName, os, arch)
 	if len(checksum) == 0 {

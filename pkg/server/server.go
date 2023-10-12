@@ -98,7 +98,7 @@ func (s *Server) Start(address string, config *tls.Config, tlsOverride bool) (er
 		s.prefix = "https"
 	}
 
-	s.helper.Printer.Printf("Starting server on %s://%s (domain %s)", s.prefix, address, s.helper.Config.Domain)
+	s.helper.Printer.Printf("Starting server on %s://%s (domain %s)\n", s.prefix, address, s.helper.Config.Domain)
 	return s.app.Listener(listener)
 }
 

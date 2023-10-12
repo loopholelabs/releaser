@@ -67,7 +67,7 @@ func Cmd() command.SetupCommand[*config.Config] {
 				ch.Printer.Printf("Releaser starting for Github Repository %s/%s, binaries will be created as %s", ch.Config.RepositoryOwner, ch.Config.Repository, ch.Config.Binary)
 
 				errCh := make(chan error, 1)
-				s := server.New(githubClient, ch.Config.Hostname, ch.Config.RepositoryOwner, ch.Config.Repository, ch.Config.Domain, ch.Config.Binary)
+				s := server.New(githubClient, ch)
 				go func() {
 					errCh <- s.Start(ch.Config.ListenAddress, nil, ch.Config.TLS)
 				}()

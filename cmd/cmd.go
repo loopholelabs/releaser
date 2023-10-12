@@ -1,5 +1,5 @@
 /*
-	Copyright 2021 Loophole Labs
+	Copyright 2023 Loophole Labs
 
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
@@ -14,23 +14,21 @@
 	limitations under the License.
 */
 
-package server
+package main
 
 import (
-	"sync"
+	"github.com/loopholelabs/cmdutils/pkg/command"
+	"github.com/loopholelabs/releaser/cmd/run"
+	"github.com/loopholelabs/releaser/internal/config"
+	"github.com/loopholelabs/releaser/version"
 )
 
-var listReleaseNamesResponsePool sync.Pool
-
-func getListReleaseNamesResponse() *ListReleaseNamesResponse {
-	r := listReleaseNamesResponsePool.Get()
-	if r == nil {
-		r = new(ListReleaseNamesResponse)
-	}
-	return r.(*ListReleaseNamesResponse)
-}
-
-func putListReleaseNamesResponse(r *ListReleaseNamesResponse) {
-	r.ReleaseNames = nil
-	listReleaseNamesResponsePool.Put(r)
-}
+var Cmd = command.New[*config.Config](
+	"releaser",
+	"The Releaser Binary",
+	"The Releaser Binary.",
+	true,
+	version.V,
+	config.New,
+	[]command.SetupCommand[*config.Config]{run.Cmd()},
+)

@@ -1,5 +1,5 @@
 /*
-	Copyright 2021 Loophole Labs
+	Copyright 2023 Loophole Labs
 
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
@@ -18,11 +18,9 @@ package cache
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"fmt"
-	"github.com/google/go-github/v40/github"
+	"errors"
+	"github.com/google/go-github/v55/github"
 	"io"
 	"log"
 	"net/http"
@@ -31,21 +29,27 @@ import (
 	"time"
 )
 
-type releaseKey struct {
-	Version string
-	OS      string
-	Arch    string
-}
-
 type Cache struct {
-	mu        sync.RWMutex
-	versions  map[string]string
-	releases  map[releaseKey][]byte
-	checksums map[releaseKey]string
-	latest    string
+	mu sync.RWMutex
 
-	close chan struct{}
-	wg    sync.WaitGroup
+	// releases stores whether a release exists, given its name
+	releaseNames map[string]struct{}
+
+	// checksums stores the checksum of a given artifact across
+	// all releases
+	checksums map[artifactKey]string
+
+	// releaseArtifactNames stores the artifact names across all releases
+	releaseArtifactNames map[artifactKey]string
+
+	// latestRelease is the name of the latest release
+	latestReleaseName string
+
+	// latestReleaseArtifacts stores the artifacts for the latest release
+	latestReleaseArtifacts map[artifactKey][]byte
+
+	stop chan struct{}
+	wg   sync.WaitGroup
 
 	owner  string
 	repo   string
@@ -54,89 +58,103 @@ type Cache struct {
 
 func New(client *github.Client, owner string, repo string) (*Cache, error) {
 	c := &Cache{
-		versions:  make(map[string]string),
-		releases:  make(map[releaseKey][]byte),
-		checksums: make(map[releaseKey]string),
-		close:     make(chan struct{}, 1),
-		owner:     owner,
-		repo:      repo,
-		client:    client,
+		releaseNames:         make(map[string]struct{}),
+		checksums:            make(map[artifactKey]string),
+		releaseArtifactNames: make(map[artifactKey]string),
+
+		latestReleaseArtifacts: make(map[artifactKey][]byte),
+
+		stop:   make(chan struct{}, 1),
+		owner:  owner,
+		repo:   repo,
+		client: client,
 	}
 
 	return c, c.init()
 }
 
-func (c *Cache) GetLatest() string {
+// GetLatestReleaseName returns the name of the latest release
+func (c *Cache) GetLatestReleaseName() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.latest
+	return c.latestReleaseName
 }
 
-func (c *Cache) GetVersions() (versions []string) {
+// GetAllReleaseNames returns an array of all the release names
+func (c *Cache) GetAllReleaseNames() []string {
 	c.mu.RLock()
-	for version := range c.versions {
-		versions = append(versions, version)
+	releaseNames := make([]string, 0, len(c.releaseNames))
+	for releaseName := range c.releaseNames {
+		releaseNames = append(releaseNames, releaseName)
 	}
 	c.mu.RUnlock()
-	return versions
+	return releaseNames
 }
 
-func (c *Cache) GetVersion(version string) bool {
+// ReleaseNameExists returns true if the given release name exists
+func (c *Cache) ReleaseNameExists(releaseName string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	_, ok := c.versions[version]
+	_, ok := c.releaseNames[releaseName]
 	return ok
 }
 
-func (c *Cache) GetChecksum(version string, os string, arch string) (string, bool) {
-	if !c.GetVersion(version) {
-		return "", false
+// GetChecksum returns the checksum for the given version, os, and arch
+//
+// It will return an empty string if the checksum does not exist
+func (c *Cache) GetChecksum(releaseName string, os string, arch string) string {
+	if !c.ReleaseNameExists(releaseName) {
+		return ""
 	}
 
-	key := releaseKey{
-		Version: version,
-		OS:      os,
-		Arch:    arch,
-	}
+	key := toArtifactKey(releaseName, os, arch)
 
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if checksum, ok := c.checksums[key]; !ok {
-		return "", false
+		return ""
 	} else {
-		return checksum, true
+		return checksum
 	}
 }
 
-func (c *Cache) GetRelease(version string, os string, arch string) ([]byte, bool) {
-	if !c.GetVersion(version) {
-		return nil, false
-	}
-
-	key := releaseKey{
-		Version: version,
-		OS:      os,
-		Arch:    arch,
-	}
-
+func (c *Cache) GetLatestReleaseArtifact(os string, arch string) []byte {
+	key := toArtifactKey(c.latestReleaseName, os, arch)
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if assetBytes, ok := c.releases[key]; !ok {
-		return nil, false
+	if artifactBytes, ok := c.latestReleaseArtifacts[key]; !ok {
+		return nil
 	} else {
-		return assetBytes, true
+		return artifactBytes
+	}
+}
+
+func (c *Cache) GetReleaseArtifactName(releaseName string, os string, arch string) string {
+	if !c.ReleaseNameExists(releaseName) {
+		return ""
+	}
+	key := toArtifactKey(releaseName, os, arch)
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if artifactName, ok := c.releaseArtifactNames[key]; !ok {
+		return ""
+	} else {
+		return artifactName
 	}
 }
 
 func (c *Cache) init() error {
 	c.wg.Add(1)
-	go c.updater()
+	go c.updateLoop()
 	return nil
 }
 
-func (c *Cache) update() error {
+// doUpdate updates the cache once and returns an error if one occurred
+func (c *Cache) doUpdate() error {
 	start := time.Now()
-	deadline, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Second*30))
+
+	ctx := context.Background()
+	deadline, cancel := context.WithDeadline(ctx, time.Now().Add(time.Second*30))
 	releases, _, err := c.client.Repositories.ListReleases(deadline, c.owner, c.repo, nil)
 	if err != nil {
 		cancel()
@@ -144,199 +162,134 @@ func (c *Cache) update() error {
 	}
 	cancel()
 
-	var releasesToUpdate []*github.RepositoryRelease
-	var releasesToKeep []*github.RepositoryRelease
-	updatedVersions := make(map[string]string)
-	var latest string
+	releaseNames := make(map[string]struct{})
+	checksums := make(map[artifactKey]string)
+	releaseArtifactNames := make(map[artifactKey]string)
 
-	c.mu.RLock()
-	if len(releases) > 0 {
-		latest = strings.ToLower(*releases[0].Name)
+	if len(releases) < 1 {
+		log.Printf("no releases available")
+		return nil
 	}
+
 	for _, release := range releases {
-		releaseName := strings.ToLower(*release.Name)
-		updatedVersions[releaseName] = release.GetTargetCommitish()
-		if commitHash, ok := c.versions[releaseName]; !ok || release.GetTargetCommitish() != commitHash {
-			releasesToUpdate = append(releasesToUpdate, release)
-		} else {
-			releasesToKeep = append(releasesToKeep, release)
-		}
-	}
-	c.mu.RUnlock()
-	log.Printf("Found %d new releases, keeping %d existing releases (latest %s)", len(releasesToUpdate), len(releasesToKeep), latest)
-
-	updateMu := new(sync.Mutex)
-	updatedReleases := make(map[releaseKey][]byte)
-	updatedChecksums := make(map[releaseKey]string)
-
-	if len(releasesToUpdate) > 10 {
-		releasesToUpdate = releasesToUpdate[:10]
-	}
-
-	if len(releasesToUpdate) > 0 {
-		var wg sync.WaitGroup
-		for _, release := range releasesToUpdate {
-			releaseName := strings.ToLower(release.GetName())
-			for _, asset := range release.Assets {
-				assetID := asset.GetID()
-				assetName := strings.ToLower(asset.GetName())
-
-				if assetName == "checksums.txt" {
-					deadline, cancel = context.WithDeadline(context.Background(), time.Now().Add(time.Second*30))
-					assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.owner, c.repo, assetID, http.DefaultClient)
-					if err != nil {
-						cancel()
-						return err
-					}
-
-					assetBytes, err := io.ReadAll(assetReader)
-					if err != nil {
-						cancel()
-						return err
-					}
+		releaseName := strings.ToLower(release.GetName())
+		releaseNames[releaseName] = struct{}{}
+		for _, asset := range release.Assets {
+			assetID := asset.GetID()
+			assetName := strings.ToLower(asset.GetName())
+			switch {
+			case assetName == "checksums.txt":
+				deadline, cancel = context.WithDeadline(ctx, time.Now().Add(time.Second*30))
+				assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.owner, c.repo, assetID, http.DefaultClient)
+				if err != nil {
 					cancel()
+					return err
+				}
 
-					bytesReader := bytes.NewReader(assetBytes)
-					bufioReader := bufio.NewReader(bytesReader)
-					for {
-						line, err := bufioReader.ReadString(byte('\n'))
-						if err != nil {
-							break
-						}
-						checksumLine := strings.Split(strings.TrimSpace(line), "  ")
-						if len(checksumLine) > 1 && strings.HasSuffix(checksumLine[1], ".tar.gz") {
-							trimmed := strings.TrimSuffix(checksumLine[1], ".tar.gz")
-							split := strings.Split(trimmed, "_")
-							if len(split) > 2 {
-								key := releaseKey{
-									Version: releaseName,
-									OS:      split[2],
-									Arch:    strings.Join(split[3:], "_"),
-								}
-								updateMu.Lock()
-								updatedChecksums[key] = checksumLine[0]
-								updateMu.Unlock()
-								log.Printf("Added checksum for asset with version: %s, os: %s, arch: %s (checksum %s)", key.Version, key.OS, key.Arch, checksumLine[0])
-							} else {
-								log.Printf("Ignoring checksum for asset %s for version %s", checksumLine[1], releaseName)
-							}
-						} else {
-							log.Printf("Ignoring checksum line %s for version %s", checksumLine, releaseName)
-						}
-					}
-				} else if strings.HasSuffix(assetName, ".tar.gz") {
-					log.Printf("Starting Goroutine to download %s for version %s", assetName, releaseName)
-					wg.Add(1)
-					go func() {
-						defer wg.Done()
-						deadline, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Second*30))
-						assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.owner, c.repo, assetID, http.DefaultClient)
-						if err != nil {
-							cancel()
-							log.Printf("Unable to download release asset %s for version %s due to error %s", assetName, releaseName, err)
-							return
-						}
-
-						assetBytes, err := io.ReadAll(assetReader)
-						if err != nil {
-							cancel()
-							log.Printf("Unable to download release asset %s for version %s due to error %s", assetName, releaseName, err)
-							return
-						}
+				reader := bufio.NewReader(assetReader)
+				for {
+					line, err := reader.ReadString(byte('\n'))
+					if err != nil {
 						cancel()
-
-						trimmed := strings.TrimSuffix(assetName, ".tar.gz")
+						if !errors.Is(err, io.EOF) {
+							return err
+						}
+						break
+					}
+					checksumLine := strings.Split(strings.TrimSpace(line), "  ")
+					if len(checksumLine) > 1 && strings.HasSuffix(checksumLine[1], ".tar.gz") {
+						trimmed := strings.TrimSuffix(checksumLine[1], ".tar.gz")
 						split := strings.Split(trimmed, "_")
 						if len(split) > 2 {
-							key := releaseKey{
-								Version: releaseName,
-								OS:      split[2],
-								Arch:    strings.Join(split[3:], "_"),
-							}
-
-							updateMu.Lock()
-							if checksum, ok := updatedChecksums[key]; ok {
-								computedChecksum := sha256.Sum256(assetBytes)
-								if stringComputedChecksum := fmt.Sprintf("%x", computedChecksum); stringComputedChecksum != checksum {
-									log.Printf("Invalid checksum '%s' for asset with version: %s, os: %s, arch: %s (stored checksum %s)", stringComputedChecksum, key.Version, key.OS, key.Arch, checksum)
-									updateMu.Unlock()
-									return
-								} else {
-									log.Printf("Valid checksum '%s' for asset with version: %s, os: %s, arch: %s", stringComputedChecksum, key.Version, key.OS, key.Arch)
-								}
-							} else {
-								log.Printf("Unable to find stored checksum for asset with version: %s, os: %s, arch: %s, will ignore", key.Version, key.OS, key.Arch)
-							}
-							updatedReleases[key] = assetBytes
-							updateMu.Unlock()
-							log.Printf("Downloaded asset with version: %s, os: %s, arch: %s (%d bytes)", key.Version, key.OS, key.Arch, len(assetBytes))
+							key := toArtifactKey(releaseName, split[2], strings.Join(split[3:], "_"))
+							checksums[key] = checksumLine[0]
+							log.Printf("added checksum for asset with key %s (checksum %s)", key, checksumLine[0])
 						} else {
-							log.Printf("Ignoring asset %s for version %s", assetName, releaseName)
+							log.Printf("error: malformed asset name %s for release %s", checksumLine[1], releaseName)
 						}
-					}()
-				} else {
-					log.Printf("Ignoring asset %s for version %s", assetName, releaseName)
+					} else {
+						log.Printf("error: invalid checksum %s for release %s", checksumLine, releaseName)
+					}
 				}
-			}
-		}
-		wg.Wait()
-	}
-
-	c.mu.RLock()
-	for _, release := range releasesToKeep {
-		releaseName := strings.ToLower(*release.Name)
-		for _, asset := range release.Assets {
-			assetName := strings.ToLower(*asset.Name)
-			if strings.HasSuffix(assetName, ".tar.gz") {
+			case strings.HasSuffix(assetName, ".tar.gz"):
 				trimmed := strings.TrimSuffix(assetName, ".tar.gz")
 				split := strings.Split(trimmed, "_")
 				if len(split) > 2 {
-					key := releaseKey{
-						Version: releaseName,
-						OS:      split[2],
-						Arch:    strings.Join(split[3:], "_"),
-					}
-					if assetBytes, ok := c.releases[key]; ok {
-						updatedReleases[key] = assetBytes
-						log.Printf("Keeping asset with version: %s, os: %s, arch: %s (%d bytes)", key.Version, key.OS, key.Arch, len(assetBytes))
-						if checksum, ok := c.checksums[key]; ok {
-							updatedChecksums[key] = checksum
-							log.Printf("Keeping checksum for asset with version: %s, os: %s, arch: %s (checksum %s)", key.Version, key.OS, key.Arch, checksum)
-						} else {
-							log.Printf("Lost checksum for asset with version: %s, os: %s, arch: %s", key.Version, key.OS, key.Arch)
-						}
-					} else {
-						log.Printf("Lost asset and checksum %s for version %s", assetName, releaseName)
-					}
+					key := toArtifactKey(releaseName, split[2], strings.Join(split[3:], "_"))
+					releaseArtifactNames[key] = assetName
+					log.Printf("saved release artifact name %s with key %s", assetName, key)
 				} else {
-					log.Printf("Ignoring asset %s for version %s", assetName, releaseName)
+					log.Printf("error: malformed artifact name %s for release %s", assetName, releaseName)
 				}
-			} else {
-				log.Printf("Ignoring asset %s for version %s", assetName, releaseName)
 			}
 		}
 	}
-	c.mu.RUnlock()
 
 	c.mu.Lock()
-	c.versions = updatedVersions
-	c.releases = updatedReleases
-	c.checksums = updatedChecksums
-	c.latest = latest
+	c.releaseNames = releaseNames
+	c.checksums = checksums
+	c.releaseArtifactNames = releaseArtifactNames
 	c.mu.Unlock()
 
-	log.Printf("Done updating cache in %s", time.Since(start))
+	latestRelease := releases[0]
+	latestReleaseName := strings.ToLower(latestRelease.GetName())
+	latestReleaseArtifacts := make(map[artifactKey][]byte)
+
+	if c.latestReleaseName != latestReleaseName {
+		log.Printf("updating cached assets for latest release to %s (was %s)", latestReleaseName, c.latestReleaseName)
+		for _, asset := range latestRelease.Assets {
+			assetID := asset.GetID()
+			assetName := strings.ToLower(asset.GetName())
+			if strings.HasSuffix(assetName, ".tar.gz") {
+				deadline, cancel = context.WithDeadline(ctx, time.Now().Add(time.Second*30))
+				assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.owner, c.repo, assetID, http.DefaultClient)
+				if err != nil {
+					log.Printf("error: unable to download release asset %s for latest release %s: %s", assetName, latestReleaseName, err)
+					cancel()
+					return err
+				}
+
+				artifactBytes, err := io.ReadAll(assetReader)
+				if err != nil {
+					cancel()
+					log.Printf("error: unable to download release asset %s for latest release %s: %s", assetName, latestReleaseName, err)
+					return err
+				}
+
+				trimmed := strings.TrimSuffix(assetName, ".tar.gz")
+				split := strings.Split(trimmed, "_")
+				if len(split) > 2 {
+					key := toArtifactKey(latestReleaseName, split[2], strings.Join(split[3:], "_"))
+					latestReleaseArtifacts[key] = artifactBytes
+					log.Printf("downloaded release artifact %s with key %s (%d bytes)", assetName, key, len(artifactBytes))
+				} else {
+					log.Printf("error: malformed artifact name %s for latest release %s", assetName, latestReleaseName)
+				}
+				cancel()
+			}
+		}
+	} else {
+		log.Printf("latest release %s already cached", c.latestReleaseName)
+	}
+
+	c.mu.Lock()
+	c.latestReleaseName = latestReleaseName
+	c.latestReleaseArtifacts = latestReleaseArtifacts
+	c.mu.Unlock()
+
+	log.Printf("done updating cache in %s", time.Since(start))
 
 	return nil
 }
 
-func (c *Cache) updater() {
+// updateLoop runs the update function every minute and updates the latest cache
+func (c *Cache) updateLoop() {
 	defer c.wg.Done()
 
 	log.Printf("Doing initial update of cache")
-	err := c.update()
+	err := c.doUpdate()
 	if err != nil {
-		log.Printf("Error during initial update of cache: %s", err)
+		log.Printf("error: unable to do initial update of cache: %s", err)
 		panic(err)
 	}
 
@@ -345,13 +298,13 @@ func (c *Cache) updater() {
 
 	for {
 		select {
-		case <-c.close:
+		case <-c.stop:
 			return
 		case <-timer.C:
-			log.Printf("Updating Cache")
-			err := c.update()
+			log.Printf("updating cache")
+			err := c.doUpdate()
 			if err != nil {
-				fmt.Printf("Error while updating cache: %s", err)
+				log.Printf("error: unable to update cache: %s", err)
 			}
 			timer.Reset(time.Minute)
 		}

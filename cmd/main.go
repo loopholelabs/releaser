@@ -1,5 +1,5 @@
 /*
-	Copyright 2021 Loophole Labs
+	Copyright 2023 Loophole Labs
 
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
@@ -14,23 +14,21 @@
 	limitations under the License.
 */
 
-package server
+package main
 
 import (
-	"sync"
+	"context"
+	"os"
+	"os/signal"
 )
 
-var listReleaseNamesResponsePool sync.Pool
-
-func getListReleaseNamesResponse() *ListReleaseNamesResponse {
-	r := listReleaseNamesResponsePool.Get()
-	if r == nil {
-		r = new(ListReleaseNamesResponse)
-	}
-	return r.(*ListReleaseNamesResponse)
+func main() {
+	os.Exit(realMain())
 }
 
-func putListReleaseNamesResponse(r *ListReleaseNamesResponse) {
-	r.ReleaseNames = nil
-	listReleaseNamesResponsePool.Put(r)
+func realMain() int {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	return Cmd.Execute(ctx)
 }

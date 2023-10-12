@@ -1,5 +1,5 @@
 /*
-	Copyright 2021 Loophole Labs
+	Copyright 2023 Loophole Labs
 
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
@@ -14,23 +14,12 @@
 	limitations under the License.
 */
 
-package server
+package cache
 
-import (
-	"sync"
-)
+import "fmt"
 
-var listReleaseNamesResponsePool sync.Pool
+type artifactKey string
 
-func getListReleaseNamesResponse() *ListReleaseNamesResponse {
-	r := listReleaseNamesResponsePool.Get()
-	if r == nil {
-		r = new(ListReleaseNamesResponse)
-	}
-	return r.(*ListReleaseNamesResponse)
-}
-
-func putListReleaseNamesResponse(r *ListReleaseNamesResponse) {
-	r.ReleaseNames = nil
-	listReleaseNamesResponsePool.Put(r)
+func toArtifactKey(releaseName string, os string, arch string) artifactKey {
+	return artifactKey(fmt.Sprintf("%s-%s-%s", releaseName, os, arch))
 }

@@ -1,5 +1,5 @@
 /*
-	Copyright 2021 Loophole Labs
+	Copyright 2023 Loophole Labs
 
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
@@ -14,23 +14,13 @@
 	limitations under the License.
 */
 
-package server
+package posthog
 
-import (
-	"sync"
-)
+import "github.com/posthog/posthog-go"
 
-var listReleaseNamesResponsePool sync.Pool
+var _ posthog.Logger = (*noopLogger)(nil)
 
-func getListReleaseNamesResponse() *ListReleaseNamesResponse {
-	r := listReleaseNamesResponsePool.Get()
-	if r == nil {
-		r = new(ListReleaseNamesResponse)
-	}
-	return r.(*ListReleaseNamesResponse)
-}
+type noopLogger struct{}
 
-func putListReleaseNamesResponse(r *ListReleaseNamesResponse) {
-	r.ReleaseNames = nil
-	listReleaseNamesResponsePool.Put(r)
-}
+func (n *noopLogger) Logf(_ string, _ ...interface{})  {}
+func (n noopLogger) Errorf(_ string, _ ...interface{}) {}

@@ -1,5 +1,5 @@
 /*
-	Copyright 2021 Loophole Labs
+	Copyright 2023 Loophole Labs
 
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
@@ -18,28 +18,31 @@ package server
 
 import (
 	"crypto/tls"
+	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/helmet/v2"
-	"github.com/google/go-github/v40/github"
+	"github.com/google/go-github/v55/github"
+	"github.com/loopholelabs/releaser/analytics"
 	"github.com/loopholelabs/releaser/embed"
 	"github.com/loopholelabs/releaser/internal/utils"
 	"github.com/loopholelabs/releaser/pkg/cache"
 	"github.com/valyala/fasttemplate"
 	"log"
 	"net"
+	"strings"
 	"time"
 )
 
 const (
-	RootPath     = "/"
-	PingPath     = "/ping"
-	LatestPath   = "/latest"
-	VersionsPath = "/versions"
-	ChecksumPath = "/checksum"
+	LatestReleasePath     = "/"
+	PingPath              = "/ping"
+	LatestReleaseNamePath = "/latest"
+	ListReleaseNamesPath  = "/releases"
+	ChecksumPath          = "/checksum"
 
-	VersionArgPath = "/:version"
-	OSArgPath      = "/:os"
-	ArchArgPath    = "/:arch"
+	ReleaseNameArgPath = "/:release_name"
+	OSArgPath          = "/:os"
+	ArchArgPath        = "/:arch"
 )
 
 type Server struct {
@@ -111,92 +114,113 @@ func (s *Server) Stop() error {
 func (s *Server) init() {
 	s.app.Use(helmet.New())
 
-	s.app.Get(RootPath, s.GetRoot)
 	s.app.Get(PingPath, s.GetPing)
-	s.app.Get(LatestPath, s.GetLatest)
-	s.app.Get(VersionsPath, s.GetVersions)
-	s.app.Get(VersionArgPath, s.GetVersion)
-	s.app.Get(utils.JoinStrings(VersionArgPath, OSArgPath, ArchArgPath), s.GetBinary)
-	s.app.Get(utils.JoinStrings(ChecksumPath, VersionArgPath, OSArgPath, ArchArgPath), s.GetChecksum)
+	s.app.Get(LatestReleasePath, s.GetLatestReleaseShellScript)
+	s.app.Get(LatestReleaseNamePath, s.GetLatestReleaseName)
+	s.app.Get(ListReleaseNamesPath, s.ListReleaseNames)
+	s.app.Get(ReleaseNameArgPath, s.GetReleaseShellScript)
+
+	s.app.Get(utils.JoinStrings(ChecksumPath, ReleaseNameArgPath, OSArgPath, ArchArgPath), s.GetChecksum)
+	s.app.Get(utils.JoinStrings(ReleaseNameArgPath, OSArgPath, ArchArgPath), s.GetReleaseArtifact)
 }
 
-func (s *Server) GetRoot(ctx *fiber.Ctx) error {
-	latest := s.cache.GetLatest()
-	if len(latest) == 0 {
-		return ctx.Status(fiber.StatusInternalServerError).SendString("no releases available")
-	}
-
-	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
-	return ctx.SendString(s.template.ExecuteString(map[string]interface{}{
-		"domain":  s.domain,
-		"version": latest,
-		"prefix":  s.prefix,
-		"binary":  s.binary,
-	}))
-}
-
+// GetPing is a simple health check endpoint that always returns 200
 func (s *Server) GetPing(ctx *fiber.Ctx) error {
 	return ctx.SendStatus(fiber.StatusOK)
 }
 
-func (s *Server) GetLatest(ctx *fiber.Ctx) error {
-	latest := s.cache.GetLatest()
-	if len(latest) == 0 {
+// GetLatestReleaseShellScript returns a shell script which will download the latest release of the binary
+// and install it on the system
+func (s *Server) GetLatestReleaseShellScript(ctx *fiber.Ctx) error {
+	latestReleaseName := s.cache.GetLatestReleaseName()
+	if len(latestReleaseName) == 0 {
 		return ctx.Status(fiber.StatusInternalServerError).SendString("no releases available")
 	}
-	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
-	return ctx.SendString(latest)
+
+	return ctx.Redirect("/"+latestReleaseName, fiber.StatusFound)
 }
 
-func (s *Server) GetVersions(ctx *fiber.Ctx) error {
-	res := getVersionsResponse()
-	defer putVersionsResponse(res)
-	res.Versions = s.cache.GetVersions()
-	ctx.Response().Header.SetContentType(fiber.MIMEApplicationJSONCharsetUTF8)
-	return ctx.JSON(res)
-}
+// GetReleaseShellScript returns a shell script which will download the given release of the binary
+// and install it on the system
+func (s *Server) GetReleaseShellScript(ctx *fiber.Ctx) error {
+	releaseName := ctx.Params("release_name")
 
-func (s *Server) GetVersion(ctx *fiber.Ctx) error {
-	version := ctx.Params("version")
+	analytics.Event("release_shell_script", map[string]string{"release_name": releaseName})
 
-	if !s.cache.GetVersion(version) {
-		return ctx.Status(fiber.StatusNotFound).SendString("version not available")
+	if !s.cache.ReleaseNameExists(releaseName) {
+		return ctx.Status(fiber.StatusNotFound).SendString("release not found")
 	}
 
 	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
 	return ctx.SendString(s.template.ExecuteString(map[string]interface{}{
-		"domain":  s.domain,
-		"version": version,
-		"prefix":  s.prefix,
-		"binary":  s.binary,
+		"domain":       s.domain,
+		"release_name": releaseName,
+		"prefix":       s.prefix,
+		"binary":       s.binary,
 	}))
 }
 
+// GetLatestReleaseName returns the name of the latest release
+func (s *Server) GetLatestReleaseName(ctx *fiber.Ctx) error {
+	latestReleaseName := s.cache.GetLatestReleaseName()
+	if len(latestReleaseName) == 0 {
+		return ctx.Status(fiber.StatusInternalServerError).SendString("no releases available")
+	}
+	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
+	return ctx.SendString(latestReleaseName)
+}
+
+// ListReleaseNames returns a list of all available release names
+func (s *Server) ListReleaseNames(ctx *fiber.Ctx) error {
+	res := getListReleaseNamesResponse()
+	defer putListReleaseNamesResponse(res)
+	res.ReleaseNames = s.cache.GetAllReleaseNames()
+	ctx.Response().Header.SetContentType(fiber.MIMEApplicationJSONCharsetUTF8)
+	return ctx.JSON(res)
+}
+
+// GetChecksum returns the checksum for the given release name, os, and arch
 func (s *Server) GetChecksum(ctx *fiber.Ctx) error {
-	version := ctx.Params("version")
+	releaseName := ctx.Params("release_name")
 	os := ctx.Params("os")
 	arch := ctx.Params("arch")
 
-	checksum, ok := s.cache.GetChecksum(version, os, arch)
-	if !ok {
-		return ctx.Status(fiber.StatusNotFound).SendString("checksum does not exist")
+	checksum := s.cache.GetChecksum(releaseName, os, arch)
+	if len(checksum) == 0 {
+		return ctx.Status(fiber.StatusNotFound).SendString("checksum not found")
 	}
 
 	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
 	return ctx.SendString(checksum)
 }
 
-func (s *Server) GetBinary(ctx *fiber.Ctx) error {
-	version := ctx.Params("version")
+// GetReleaseArtifact returns the artifact for the given release name, os, and arch
+func (s *Server) GetReleaseArtifact(ctx *fiber.Ctx) error {
+	releaseName := strings.ToLower(ctx.Params("release_name"))
 	os := ctx.Params("os")
 	arch := ctx.Params("arch")
 
-	asset, ok := s.cache.GetRelease(version, os, arch)
-	if !ok {
-		return ctx.Status(fiber.StatusNotFound).SendString("release does not exist")
+	analytics.Event("release_shell_script", map[string]string{
+		"release_name": releaseName,
+		"os":           os,
+		"arch":         arch,
+	})
+
+	if s.cache.GetLatestReleaseName() == releaseName {
+		artifactBytes := s.cache.GetLatestReleaseArtifact(os, arch)
+		if artifactBytes == nil {
+			return ctx.Status(fiber.StatusNotFound).SendString("release not found")
+		}
+
+		ctx.Response().Header.SetContentType(fiber.MIMEOctetStream)
+		ctx.Response().SetBody(artifactBytes)
+		return nil
 	}
 
-	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
-	ctx.Response().SetBody(asset)
-	return nil
+	artifactName := s.cache.GetReleaseArtifactName(releaseName, os, arch)
+	if artifactName == "" {
+		return ctx.Status(fiber.StatusNotFound).SendString("release not found")
+	}
+
+	return ctx.Redirect(fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", s.owner, s.repo, releaseName, artifactName))
 }

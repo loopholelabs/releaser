@@ -17,9 +17,15 @@
 package utils
 
 import (
-	"github.com/pkg/errors"
+	"github.com/loopholelabs/cmdutils"
+	"github.com/loopholelabs/releaser/analytics"
+	"github.com/loopholelabs/releaser/internal/config"
+	"github.com/spf13/cobra"
+	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 const (
@@ -42,16 +48,27 @@ func JoinPaths(s ...string) string {
 	return ret
 }
 
-func BodyError(errs []error, def error, body []byte) error {
-	if len(errs) > 0 {
-		if body != nil {
-			return errors.Wrap(errors.New(string(body)), def.Error())
-		}
-		retError := errs[0]
-		for i := 1; i < len(errs); i++ {
-			retError = errors.Wrap(retError, errs[i].Error())
-		}
-		return errors.Wrap(retError, def.Error())
+func PostRunAnalytics(_ *cmdutils.Helper[*config.Config]) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		analytics.Cleanup()
+		return nil
 	}
-	return def
+}
+
+func WaitForSignal(errChan chan error) error {
+	sig := make(chan os.Signal, 2)
+	defer close(sig)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sig)
+	for {
+		select {
+		case <-sig:
+			return nil
+		case err := <-errChan:
+			if err == nil {
+				continue
+			}
+			return err
+		}
+	}
 }

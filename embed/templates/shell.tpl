@@ -160,7 +160,7 @@ start() {
   uname_arch_check
 
   domain="{{domain}}"
-  version="{{version}}"
+  releaseName="{{release_name}}"
   prefix="{{prefix}}"
   binary="{{binary}}"
 
@@ -169,8 +169,8 @@ start() {
   tmp="$tmpDir/$binary"
 
   echo
-  log_info "Downloading Version $version for $os $arch"
-  http_download $tmp "$prefix://$domain/$version/$os/$arch"
+  log_info "Downloading Release $releaseName for $os $arch"
+  http_download $tmp "$prefix://$domain/$releaseName/$os/$arch"
 
   if [ -w "$install" ]; then
     log_info "Installing $binary to $install"
@@ -180,7 +180,7 @@ start() {
     otherInstall="$HOME/.config/$binary/bin"
     mkdir -p "$otherInstall"
     log_info "Permissions required for installation to $install, using $otherInstall instead — alternatively specify a new directory with:"
-    log_info "  $ curl -fsSL $prefix://$domain/$version | INSTALL=. sh"
+    log_info "  $ curl -fsSL $prefix://$domain/$releaseName | INSTALL=. sh"
     tar -xf "$tmp" -O | tee "$otherInstall/$binary" > /dev/null
     chmod +x "$otherInstall/$binary"
     EXPORT_PATH="export PATH=\"\$PATH:$otherInstall\""

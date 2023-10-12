@@ -1,5 +1,5 @@
 /*
-	Copyright 2021 Loophole Labs
+	Copyright 2023 Loophole Labs
 
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
@@ -19,17 +19,15 @@ package client
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/loopholelabs/releaser/internal/utils"
 	"github.com/loopholelabs/releaser/pkg/server"
-	"github.com/pkg/errors"
 	"runtime"
 )
 
 var (
-	GetVersionsError     = errors.New("error while getting available versions")
-	DownloadError        = errors.New("error while downloading release")
 	InvalidChecksumError = errors.New("error while verifying checksum")
 )
 
@@ -45,26 +43,26 @@ func New(base string) *Client {
 	}
 }
 
-func (c *Client) GetVersions() (*server.VersionsResponse, error) {
+func (c *Client) ListReleaseNames() (*server.ListReleaseNamesResponse, error) {
 	req := c.client.NewRequest()
-	res, err := req.Get(server.VersionsPath)
+	res, err := req.Get(server.ListReleaseNamesPath)
 	if err != nil {
-		return nil, errors.Wrap(err, GetVersionsError.Error())
+		return nil, fmt.Errorf("error while getting available release names: %w", err)
 	}
 
 	if res.StatusCode() != 200 {
 		return nil, fmt.Errorf("invalid response status code: %d with body '%s'", res.StatusCode(), string(res.Body()))
 	}
 
-	val := new(server.VersionsResponse)
+	val := new(server.ListReleaseNamesResponse)
 	return val, json.Unmarshal(res.Body(), val)
 }
 
-func (c *Client) GetLatest() (string, error) {
+func (c *Client) GetLatestReleaseName() (string, error) {
 	req := c.client.NewRequest()
-	res, err := req.Get(server.LatestPath)
+	res, err := req.Get(server.LatestReleaseNamePath)
 	if err != nil {
-		return "", errors.Wrap(err, GetVersionsError.Error())
+		return "", fmt.Errorf("error while getting latest release name: %w", err)
 	}
 
 	if res.StatusCode() != 200 {
@@ -74,11 +72,11 @@ func (c *Client) GetLatest() (string, error) {
 	return string(res.Body()), nil
 }
 
-func (c *Client) GetChecksum(version string) (string, error) {
+func (c *Client) GetChecksum(releaseName string) (string, error) {
 	req := c.client.NewRequest()
-	res, err := req.Get(utils.JoinPaths(server.ChecksumPath, version, runtime.GOOS, runtime.GOARCH))
+	res, err := req.Get(utils.JoinPaths(server.ChecksumPath, releaseName, runtime.GOOS, runtime.GOARCH))
 	if err != nil {
-		return "", errors.Wrap(err, DownloadError.Error())
+		return "", fmt.Errorf("error while getting checksum: %w", err)
 	}
 
 	if res.StatusCode() != 200 {
@@ -88,11 +86,11 @@ func (c *Client) GetChecksum(version string) (string, error) {
 	return string(res.Body()), nil
 }
 
-func (c *Client) GetBinary(version string) ([]byte, error) {
+func (c *Client) GetReleaseArtifact(releaseName string) ([]byte, error) {
 	req := c.client.NewRequest()
-	res, err := req.Get(utils.JoinPaths(version, runtime.GOOS, runtime.GOARCH))
+	res, err := req.Get(utils.JoinPaths(releaseName, runtime.GOOS, runtime.GOARCH))
 	if err != nil {
-		return nil, errors.Wrap(err, DownloadError.Error())
+		return nil, fmt.Errorf("error while getting release artifact: %w", err)
 	}
 
 	if res.StatusCode() != 200 {
@@ -102,13 +100,13 @@ func (c *Client) GetBinary(version string) ([]byte, error) {
 	return res.Body(), nil
 }
 
-func (c *Client) DownloadVersion(version string) ([]byte, error) {
-	body, err := c.GetBinary(version)
+func (c *Client) DownloadReleaseArtifactAndVerify(releaseName string) ([]byte, error) {
+	body, err := c.GetReleaseArtifact(releaseName)
 	if err != nil {
 		return nil, err
 	}
 
-	checksum, err := c.GetChecksum(version)
+	checksum, err := c.GetChecksum(releaseName)
 	if err != nil {
 		return nil, err
 	}

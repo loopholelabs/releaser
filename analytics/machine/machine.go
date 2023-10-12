@@ -1,5 +1,5 @@
 /*
-	Copyright 2021 Loophole Labs
+	Copyright 2023 Loophole Labs
 
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
@@ -14,23 +14,29 @@
 	limitations under the License.
 */
 
-package server
+package machine
 
 import (
-	"sync"
+	"github.com/denisbrodbeck/machineid"
 )
 
-var listReleaseNamesResponsePool sync.Pool
+var (
+	// ApplicationID is the unique Application ID
+	ApplicationID = ""
+)
 
-func getListReleaseNamesResponse() *ListReleaseNamesResponse {
-	r := listReleaseNamesResponsePool.Get()
-	if r == nil {
-		r = new(ListReleaseNamesResponse)
-	}
-	return r.(*ListReleaseNamesResponse)
+var (
+	id string
+)
+
+func init() {
+	id, _ = machineid.ProtectedID(ApplicationID)
 }
 
-func putListReleaseNamesResponse(r *ListReleaseNamesResponse) {
-	r.ReleaseNames = nil
-	listReleaseNamesResponsePool.Put(r)
+func ID() string {
+	return id
+}
+
+func Available() bool {
+	return id != ""
 }

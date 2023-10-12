@@ -267,14 +267,14 @@ func (c *Cache) doUpdate() error {
 				cancel()
 			}
 		}
+
+		c.mu.Lock()
+		c.latestReleaseName = latestReleaseName
+		c.latestReleaseArtifacts = latestReleaseArtifacts
+		c.mu.Unlock()
 	} else {
 		c.helper.Printer.Printf("latest release %s already cached\n", c.latestReleaseName)
 	}
-
-	c.mu.Lock()
-	c.latestReleaseName = latestReleaseName
-	c.latestReleaseArtifacts = latestReleaseArtifacts
-	c.mu.Unlock()
 
 	c.helper.Printer.Printf("done updating cache in %s\n", time.Since(start))
 

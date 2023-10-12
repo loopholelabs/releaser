@@ -232,9 +232,9 @@ func (c *Cache) doUpdate() error {
 
 	latestRelease := releases[0]
 	latestReleaseName := strings.ToLower(latestRelease.GetName())
-	latestReleaseArtifacts := make(map[artifactKey][]byte)
 
 	if c.latestReleaseName != latestReleaseName {
+		latestReleaseArtifacts := make(map[artifactKey][]byte)
 		c.helper.Printer.Printf("updating cached assets for latest release to %s (was %s)\n", latestReleaseName, c.latestReleaseName)
 		for _, asset := range latestRelease.Assets {
 			assetID := asset.GetID()

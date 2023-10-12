@@ -10,7 +10,6 @@ require (
 	github.com/google/go-github/v55 v55.0.0
 	github.com/loopholelabs/cmdutils v0.1.4
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/namsral/flag v1.7.4-pre
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/posthog/posthog-go v0.0.0-20230801140217-d607812dee69
 	github.com/rs/zerolog v1.31.0

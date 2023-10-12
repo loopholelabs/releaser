@@ -21,8 +21,9 @@ import (
 	"context"
 	"errors"
 	"github.com/google/go-github/v55/github"
+	"github.com/loopholelabs/cmdutils"
+	"github.com/loopholelabs/releaser/internal/config"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -51,12 +52,11 @@ type Cache struct {
 	stop chan struct{}
 	wg   sync.WaitGroup
 
-	owner  string
-	repo   string
+	helper *cmdutils.Helper[*config.Config]
 	client *github.Client
 }
 
-func New(client *github.Client, owner string, repo string) (*Cache, error) {
+func New(client *github.Client, helper *cmdutils.Helper[*config.Config]) (*Cache, error) {
 	c := &Cache{
 		releaseNames:         make(map[string]struct{}),
 		checksums:            make(map[artifactKey]string),
@@ -65,8 +65,7 @@ func New(client *github.Client, owner string, repo string) (*Cache, error) {
 		latestReleaseArtifacts: make(map[artifactKey][]byte),
 
 		stop:   make(chan struct{}, 1),
-		owner:  owner,
-		repo:   repo,
+		helper: helper,
 		client: client,
 	}
 
@@ -155,7 +154,7 @@ func (c *Cache) doUpdate() error {
 
 	ctx := context.Background()
 	deadline, cancel := context.WithDeadline(ctx, time.Now().Add(time.Second*30))
-	releases, _, err := c.client.Repositories.ListReleases(deadline, c.owner, c.repo, nil)
+	releases, _, err := c.client.Repositories.ListReleases(deadline, c.helper.Config.RepositoryOwner, c.helper.Config.Repository, nil)
 	if err != nil {
 		cancel()
 		return err
@@ -167,7 +166,7 @@ func (c *Cache) doUpdate() error {
 	releaseArtifactNames := make(map[artifactKey]string)
 
 	if len(releases) < 1 {
-		log.Printf("no releases available")
+		c.helper.Printer.Printf("no releases available")
 		return nil
 	}
 
@@ -180,7 +179,7 @@ func (c *Cache) doUpdate() error {
 			switch {
 			case assetName == "checksums.txt":
 				deadline, cancel = context.WithDeadline(ctx, time.Now().Add(time.Second*30))
-				assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.owner, c.repo, assetID, http.DefaultClient)
+				assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.helper.Config.RepositoryOwner, c.helper.Config.Repository, assetID, http.DefaultClient)
 				if err != nil {
 					cancel()
 					return err
@@ -203,12 +202,12 @@ func (c *Cache) doUpdate() error {
 						if len(split) > 2 {
 							key := toArtifactKey(releaseName, split[2], strings.Join(split[3:], "_"))
 							checksums[key] = checksumLine[0]
-							log.Printf("added checksum for asset with key %s (checksum %s)", key, checksumLine[0])
+							c.helper.Printer.Printf("added checksum for asset with key %s (checksum %s)", key, checksumLine[0])
 						} else {
-							log.Printf("error: malformed asset name %s for release %s", checksumLine[1], releaseName)
+							c.helper.Printer.Printf("error: malformed asset name %s for release %s", checksumLine[1], releaseName)
 						}
 					} else {
-						log.Printf("error: invalid checksum %s for release %s", checksumLine, releaseName)
+						c.helper.Printer.Printf("error: invalid checksum %s for release %s", checksumLine, releaseName)
 					}
 				}
 			case strings.HasSuffix(assetName, ".tar.gz"):
@@ -217,9 +216,9 @@ func (c *Cache) doUpdate() error {
 				if len(split) > 2 {
 					key := toArtifactKey(releaseName, split[2], strings.Join(split[3:], "_"))
 					releaseArtifactNames[key] = assetName
-					log.Printf("saved release artifact name %s with key %s", assetName, key)
+					c.helper.Printer.Printf("saved release artifact name %s with key %s", assetName, key)
 				} else {
-					log.Printf("error: malformed artifact name %s for release %s", assetName, releaseName)
+					c.helper.Printer.Printf("error: malformed artifact name %s for release %s", assetName, releaseName)
 				}
 			}
 		}
@@ -236,15 +235,15 @@ func (c *Cache) doUpdate() error {
 	latestReleaseArtifacts := make(map[artifactKey][]byte)
 
 	if c.latestReleaseName != latestReleaseName {
-		log.Printf("updating cached assets for latest release to %s (was %s)", latestReleaseName, c.latestReleaseName)
+		c.helper.Printer.Printf("updating cached assets for latest release to %s (was %s)", latestReleaseName, c.latestReleaseName)
 		for _, asset := range latestRelease.Assets {
 			assetID := asset.GetID()
 			assetName := strings.ToLower(asset.GetName())
 			if strings.HasSuffix(assetName, ".tar.gz") {
 				deadline, cancel = context.WithDeadline(ctx, time.Now().Add(time.Second*30))
-				assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.owner, c.repo, assetID, http.DefaultClient)
+				assetReader, _, err := c.client.Repositories.DownloadReleaseAsset(deadline, c.helper.Config.RepositoryOwner, c.helper.Config.Repository, assetID, http.DefaultClient)
 				if err != nil {
-					log.Printf("error: unable to download release asset %s for latest release %s: %s", assetName, latestReleaseName, err)
+					c.helper.Printer.Printf("error: unable to download release asset %s for latest release %s: %s", assetName, latestReleaseName, err)
 					cancel()
 					return err
 				}
@@ -252,7 +251,7 @@ func (c *Cache) doUpdate() error {
 				artifactBytes, err := io.ReadAll(assetReader)
 				if err != nil {
 					cancel()
-					log.Printf("error: unable to download release asset %s for latest release %s: %s", assetName, latestReleaseName, err)
+					c.helper.Printer.Printf("error: unable to download release asset %s for latest release %s: %s", assetName, latestReleaseName, err)
 					return err
 				}
 
@@ -261,15 +260,15 @@ func (c *Cache) doUpdate() error {
 				if len(split) > 2 {
 					key := toArtifactKey(latestReleaseName, split[2], strings.Join(split[3:], "_"))
 					latestReleaseArtifacts[key] = artifactBytes
-					log.Printf("downloaded release artifact %s with key %s (%d bytes)", assetName, key, len(artifactBytes))
+					c.helper.Printer.Printf("downloaded release artifact %s with key %s (%d bytes)", assetName, key, len(artifactBytes))
 				} else {
-					log.Printf("error: malformed artifact name %s for latest release %s", assetName, latestReleaseName)
+					c.helper.Printer.Printf("error: malformed artifact name %s for latest release %s", assetName, latestReleaseName)
 				}
 				cancel()
 			}
 		}
 	} else {
-		log.Printf("latest release %s already cached", c.latestReleaseName)
+		c.helper.Printer.Printf("latest release %s already cached", c.latestReleaseName)
 	}
 
 	c.mu.Lock()
@@ -277,7 +276,7 @@ func (c *Cache) doUpdate() error {
 	c.latestReleaseArtifacts = latestReleaseArtifacts
 	c.mu.Unlock()
 
-	log.Printf("done updating cache in %s", time.Since(start))
+	c.helper.Printer.Printf("done updating cache in %s", time.Since(start))
 
 	return nil
 }
@@ -286,10 +285,10 @@ func (c *Cache) doUpdate() error {
 func (c *Cache) updateLoop() {
 	defer c.wg.Done()
 
-	log.Printf("Doing initial update of cache")
+	c.helper.Printer.Printf("Doing initial update of cache")
 	err := c.doUpdate()
 	if err != nil {
-		log.Printf("error: unable to do initial update of cache: %s", err)
+		c.helper.Printer.Printf("error: unable to do initial update of cache: %s", err)
 		panic(err)
 	}
 
@@ -301,10 +300,10 @@ func (c *Cache) updateLoop() {
 		case <-c.stop:
 			return
 		case <-timer.C:
-			log.Printf("updating cache")
+			c.helper.Printer.Printf("updating cache")
 			err := c.doUpdate()
 			if err != nil {
-				log.Printf("error: unable to update cache: %s", err)
+				c.helper.Printer.Printf("error: unable to update cache: %s", err)
 			}
 			timer.Reset(time.Minute)
 		}

@@ -2,4 +2,4 @@
 cmds = ["go build -o releaser -ldflags=\"-s -w -X 'github.com/loopholelabs/releaser/analytics/machine.ApplicationID=$ANALYTICS_APPLICATION_ID' -X 'github.com/loopholelabs/releaser/analytics/posthog.APIKey=$POSTHOG_API_KEY' -X 'github.com/loopholelabs/releaser/analytics/posthog.APIHost=$POSTHOG_API_HOST'\" ./cmd/."]
 
 [start]
-cmd = "./releaser run"
+cmd = "./releaser run --log=stdout"

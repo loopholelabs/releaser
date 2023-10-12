@@ -22,12 +22,13 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/helmet/v2"
 	"github.com/google/go-github/v55/github"
+	"github.com/loopholelabs/cmdutils"
 	"github.com/loopholelabs/releaser/analytics"
 	"github.com/loopholelabs/releaser/embed"
+	"github.com/loopholelabs/releaser/internal/config"
 	"github.com/loopholelabs/releaser/internal/utils"
 	"github.com/loopholelabs/releaser/pkg/cache"
 	"github.com/valyala/fasttemplate"
-	"log"
 	"net"
 	"strings"
 	"time"
@@ -49,18 +50,15 @@ type Server struct {
 	app      *fiber.App
 	cache    *cache.Cache
 	github   *github.Client
-	owner    string
-	repo     string
-	domain   string
+	helper   *cmdutils.Helper[*config.Config]
 	prefix   string
-	binary   string
 	template *fasttemplate.Template
 }
 
-func New(github *github.Client, hostname string, owner string, repo string, domain string, binary string) *Server {
+func New(github *github.Client, helper *cmdutils.Helper[*config.Config]) *Server {
 	s := &Server{
 		app: fiber.New(fiber.Config{
-			ServerHeader:                 hostname,
+			ServerHeader:                 helper.Config.Hostname,
 			BodyLimit:                    -1,
 			ReadTimeout:                  time.Minute * 3,
 			WriteTimeout:                 time.Second * 30,
@@ -71,10 +69,7 @@ func New(github *github.Client, hostname string, owner string, repo string, doma
 			DisablePreParseMultipartForm: true,
 		}),
 		github: github,
-		owner:  owner,
-		repo:   repo,
-		domain: domain,
-		binary: binary,
+		helper: helper,
 	}
 
 	s.init()
@@ -84,7 +79,7 @@ func New(github *github.Client, hostname string, owner string, repo string, doma
 
 func (s *Server) Start(address string, config *tls.Config, tlsOverride bool) (err error) {
 	s.template = fasttemplate.New(embed.Shell, embed.StartTag, embed.EndTag)
-	s.cache, err = cache.New(s.github, s.owner, s.repo)
+	s.cache, err = cache.New(s.github, s.helper)
 	if err != nil {
 		return err
 	}
@@ -103,7 +98,7 @@ func (s *Server) Start(address string, config *tls.Config, tlsOverride bool) (er
 		s.prefix = "https"
 	}
 
-	log.Printf("Starting server on %s://%s (domain %s)", s.prefix, address, s.domain)
+	s.helper.Printer.Printf("Starting server on %s://%s (domain %s)", s.prefix, address, s.helper.Config.Domain)
 	return s.app.Listener(listener)
 }
 
@@ -153,10 +148,10 @@ func (s *Server) GetReleaseShellScript(ctx *fiber.Ctx) error {
 
 	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
 	return ctx.SendString(s.template.ExecuteString(map[string]interface{}{
-		"domain":       s.domain,
+		"domain":       s.helper.Config.Domain,
 		"release_name": releaseName,
 		"prefix":       s.prefix,
-		"binary":       s.binary,
+		"binary":       s.helper.Config.Binary,
 	}))
 }
 
@@ -230,5 +225,5 @@ func (s *Server) GetReleaseArtifact(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusNotFound).SendString("release not found")
 	}
 
-	return ctx.Redirect(fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", s.owner, s.repo, releaseName, artifactName))
+	return ctx.Redirect(fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", s.helper.Config.RepositoryOwner, s.helper.Config.Repository, releaseName, artifactName))
 }

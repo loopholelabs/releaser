@@ -145,7 +145,7 @@ func (s *Server) GetLatestReleaseShellScript(ctx *fiber.Ctx) error {
 func (s *Server) GetReleaseShellScript(ctx *fiber.Ctx) error {
 	releaseName := ctx.Params("release_name")
 
-	analytics.Event("release_shell_script", map[string]string{"release_name": releaseName})
+	analytics.Event("release_shell", map[string]string{"release_name": releaseName})
 
 	if !s.cache.ReleaseNameExists(releaseName) {
 		return ctx.Status(fiber.StatusNotFound).SendString("release not found")
@@ -200,7 +200,7 @@ func (s *Server) GetReleaseArtifact(ctx *fiber.Ctx) error {
 	os := ctx.Params("os")
 	arch := ctx.Params("arch")
 
-	analytics.Event("release_shell_script", map[string]string{
+	analytics.Event("release_artifact", map[string]string{
 		"release_name": releaseName,
 		"os":           os,
 		"arch":         arch,

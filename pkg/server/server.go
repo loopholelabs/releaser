@@ -44,6 +44,8 @@ const (
 	ReleaseNameArgPath = "/:release_name"
 	OSArgPath          = "/:os"
 	ArchArgPath        = "/:arch"
+
+	Analytics = "analytics"
 )
 
 type Server struct {
@@ -132,7 +134,7 @@ func (s *Server) GetLatestReleaseShellScript(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusInternalServerError).SendString("no releases available")
 	}
 
-	return ctx.Redirect("/"+latestReleaseName, fiber.StatusFound)
+	return ctx.Redirect(fmt.Sprintf("/%s?%s=%s", latestReleaseName, Analytics, ctx.Query(Analytics)), fiber.StatusFound)
 }
 
 // GetReleaseShellScript returns a shell script which will download the given release of the binary
@@ -140,10 +142,12 @@ func (s *Server) GetLatestReleaseShellScript(ctx *fiber.Ctx) error {
 func (s *Server) GetReleaseShellScript(ctx *fiber.Ctx) error {
 	releaseName := ctx.Params("release_name")
 
-	analytics.Event("release_shell", map[string]string{"release_name": releaseName})
-
 	if !s.cache.ReleaseNameExists(releaseName) {
 		return ctx.Status(fiber.StatusNotFound).SendString("release not found")
+	}
+
+	if ctx.Query(Analytics) != "false" {
+		analytics.Event("release_shell", map[string]string{"release_name": releaseName})
 	}
 
 	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
@@ -157,7 +161,9 @@ func (s *Server) GetReleaseShellScript(ctx *fiber.Ctx) error {
 
 // GetLatestReleaseName returns the name of the latest release
 func (s *Server) GetLatestReleaseName(ctx *fiber.Ctx) error {
-	analytics.Event("latest_release_name")
+	if ctx.Query(Analytics) != "false" {
+		analytics.Event("latest_release_name")
+	}
 	latestReleaseName := s.cache.GetLatestReleaseName()
 	if len(latestReleaseName) == 0 {
 		return ctx.Status(fiber.StatusInternalServerError).SendString("no releases available")
@@ -168,7 +174,9 @@ func (s *Server) GetLatestReleaseName(ctx *fiber.Ctx) error {
 
 // ListReleaseNames returns a list of all available release names
 func (s *Server) ListReleaseNames(ctx *fiber.Ctx) error {
-	analytics.Event("list_release_names")
+	if ctx.Query(Analytics) != "false" {
+		analytics.Event("list_release_names")
+	}
 	res := getListReleaseNamesResponse()
 	defer putListReleaseNamesResponse(res)
 	res.ReleaseNames = s.cache.GetAllReleaseNames()
@@ -182,15 +190,17 @@ func (s *Server) GetChecksum(ctx *fiber.Ctx) error {
 	os := ctx.Params("os")
 	arch := ctx.Params("arch")
 
-	analytics.Event("checksum", map[string]string{
-		"release_name": releaseName,
-		"os":           os,
-		"arch":         arch,
-	})
-
 	checksum := s.cache.GetChecksum(releaseName, os, arch)
 	if len(checksum) == 0 {
 		return ctx.Status(fiber.StatusNotFound).SendString("checksum not found")
+	}
+
+	if ctx.Query(Analytics) != "false" {
+		analytics.Event("checksum", map[string]string{
+			"release_name": releaseName,
+			"os":           os,
+			"arch":         arch,
+		})
 	}
 
 	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
@@ -203,16 +213,18 @@ func (s *Server) GetReleaseArtifact(ctx *fiber.Ctx) error {
 	os := ctx.Params("os")
 	arch := ctx.Params("arch")
 
-	analytics.Event("release_artifact", map[string]string{
-		"release_name": releaseName,
-		"os":           os,
-		"arch":         arch,
-	})
-
 	if s.cache.GetLatestReleaseName() == releaseName {
 		artifactBytes := s.cache.GetLatestReleaseArtifact(os, arch)
 		if artifactBytes == nil {
 			return ctx.Status(fiber.StatusNotFound).SendString("release not found")
+		}
+
+		if ctx.Query(Analytics) != "false" {
+			analytics.Event("release_artifact", map[string]string{
+				"release_name": releaseName,
+				"os":           os,
+				"arch":         arch,
+			})
 		}
 
 		ctx.Response().Header.SetContentType(fiber.MIMEOctetStream)
@@ -223,6 +235,14 @@ func (s *Server) GetReleaseArtifact(ctx *fiber.Ctx) error {
 	artifactName := s.cache.GetReleaseArtifactName(releaseName, os, arch)
 	if artifactName == "" {
 		return ctx.Status(fiber.StatusNotFound).SendString("release not found")
+	}
+
+	if ctx.Query(Analytics) != "false" {
+		analytics.Event("release_artifact", map[string]string{
+			"release_name": releaseName,
+			"os":           os,
+			"arch":         arch,
+		})
 	}
 
 	return ctx.Redirect(fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", s.helper.Config.RepositoryOwner, s.helper.Config.Repository, releaseName, artifactName))

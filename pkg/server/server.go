@@ -156,7 +156,7 @@ func (s *Server) GetReleaseShellScript(ctx *fiber.Ctx) error {
 		"release_name": releaseName,
 		"prefix":       s.prefix,
 		"binary":       s.helper.Config.Binary,
-		"analytics":    fmt.Sprintf("%t", ctx.Query(Analytics) != "false"),
+		"analytics":    fmt.Sprintf("%t", ctx.Query(Analytics, "true") != "false"),
 	}))
 }
 

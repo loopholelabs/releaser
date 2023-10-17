@@ -17,6 +17,7 @@
 package analytics
 
 import (
+	"fmt"
 	"github.com/loopholelabs/releaser/analytics/posthog"
 )
 
@@ -30,6 +31,8 @@ func init() {
 	p := posthog.Init()
 	if p != nil {
 		handler = p
+	} else {
+		fmt.Printf("WARNING: PostHog Analytics are disabled\n")
 	}
 }
 

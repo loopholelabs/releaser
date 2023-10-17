@@ -134,7 +134,7 @@ func (s *Server) GetLatestReleaseShellScript(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusInternalServerError).SendString("no releases available")
 	}
 
-	return ctx.Redirect(fmt.Sprintf("/%s?%s=%s", latestReleaseName, Analytics, ctx.Query(Analytics)), fiber.StatusFound)
+	return ctx.Redirect(fmt.Sprintf("/%s?%s=%s", latestReleaseName, Analytics, ctx.Query(Analytics, "true")), fiber.StatusFound)
 }
 
 // GetReleaseShellScript returns a shell script which will download the given release of the binary

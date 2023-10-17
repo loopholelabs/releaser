@@ -3,7 +3,6 @@ module github.com/loopholelabs/releaser
 go 1.20
 
 require (
-	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/go-resty/resty/v2 v2.9.1
 	github.com/gofiber/fiber/v2 v2.49.2
 	github.com/gofiber/helmet/v2 v2.2.26

@@ -31,22 +31,23 @@ func init() {
 	p := posthog.Init()
 	if p != nil {
 		handler = p
+		fmt.Printf("PostHog Analytics are enabled\n")
 	} else {
 		fmt.Printf("WARNING: PostHog Analytics are disabled\n")
 	}
 }
 
 type Handler interface {
-	Event(name string, properties map[string]string)
+	Event(id string, name string, properties map[string]string)
 	Cleanup()
 }
 
-func Event(name string, properties ...map[string]string) {
+func Event(id string, name string, properties ...map[string]string) {
 	if handler != nil {
 		if len(properties) > 0 {
-			handler.Event(name, properties[0])
+			handler.Event(id, name, properties[0])
 		}
-		handler.Event(name, nil)
+		handler.Event(id, name, nil)
 	}
 }
 

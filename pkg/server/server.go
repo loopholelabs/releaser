@@ -147,7 +147,7 @@ func (s *Server) GetReleaseShellScript(ctx *fiber.Ctx) error {
 	}
 
 	if ctx.Query(Analytics) != "false" {
-		analytics.Event("release_shell", map[string]string{"release_name": releaseName})
+		analytics.Event(ctx.IP(), "release_shell", map[string]string{"release_name": releaseName})
 	}
 
 	ctx.Response().Header.SetContentType(fiber.MIMETextPlainCharsetUTF8)
@@ -163,7 +163,7 @@ func (s *Server) GetReleaseShellScript(ctx *fiber.Ctx) error {
 // GetLatestReleaseName returns the name of the latest release
 func (s *Server) GetLatestReleaseName(ctx *fiber.Ctx) error {
 	if ctx.Query(Analytics) != "false" {
-		analytics.Event("latest_release_name")
+		analytics.Event(ctx.IP(), "latest_release_name")
 	}
 	latestReleaseName := s.cache.GetLatestReleaseName()
 	if len(latestReleaseName) == 0 {
@@ -176,7 +176,7 @@ func (s *Server) GetLatestReleaseName(ctx *fiber.Ctx) error {
 // ListReleaseNames returns a list of all available release names
 func (s *Server) ListReleaseNames(ctx *fiber.Ctx) error {
 	if ctx.Query(Analytics) != "false" {
-		analytics.Event("list_release_names")
+		analytics.Event(ctx.IP(), "list_release_names")
 	}
 	res := getListReleaseNamesResponse()
 	defer putListReleaseNamesResponse(res)
@@ -197,7 +197,7 @@ func (s *Server) GetChecksum(ctx *fiber.Ctx) error {
 	}
 
 	if ctx.Query(Analytics) != "false" {
-		analytics.Event("checksum", map[string]string{
+		analytics.Event(ctx.IP(), "checksum", map[string]string{
 			"release_name": releaseName,
 			"os":           os,
 			"arch":         arch,
@@ -221,7 +221,7 @@ func (s *Server) GetReleaseArtifact(ctx *fiber.Ctx) error {
 		}
 
 		if ctx.Query(Analytics) != "false" {
-			analytics.Event("release_artifact", map[string]string{
+			analytics.Event(ctx.IP(), "release_artifact", map[string]string{
 				"release_name": releaseName,
 				"os":           os,
 				"arch":         arch,
@@ -239,7 +239,7 @@ func (s *Server) GetReleaseArtifact(ctx *fiber.Ctx) error {
 	}
 
 	if ctx.Query(Analytics) != "false" {
-		analytics.Event("release_artifact", map[string]string{
+		analytics.Event(ctx.IP(), "release_artifact", map[string]string{
 			"release_name": releaseName,
 			"os":           os,
 			"arch":         arch,

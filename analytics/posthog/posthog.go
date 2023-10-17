@@ -17,7 +17,6 @@
 package posthog
 
 import (
-	"github.com/loopholelabs/releaser/analytics/machine"
 	"github.com/posthog/posthog-go"
 	"time"
 )
@@ -31,12 +30,11 @@ var (
 )
 
 type PostHog struct {
-	client     posthog.Client
-	identifier string
+	client posthog.Client
 }
 
 func Init() *PostHog {
-	if APIKey == "" || APIHost == "" || !machine.Available() {
+	if APIKey == "" || APIHost == "" {
 		return nil
 	}
 
@@ -47,17 +45,16 @@ func Init() *PostHog {
 	})
 	if client != nil {
 		return &PostHog{
-			client:     client,
-			identifier: machine.ID(),
+			client: client,
 		}
 	}
 
 	return nil
 }
 
-func (p *PostHog) Event(name string, properties map[string]string) {
+func (p *PostHog) Event(id string, name string, properties map[string]string) {
 	c := posthog.Capture{
-		DistinctId: p.identifier,
+		DistinctId: id,
 		Event:      name,
 		Timestamp:  time.Now(),
 	}

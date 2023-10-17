@@ -147,6 +147,7 @@ func (s *Server) GetReleaseShellScript(ctx *fiber.Ctx) error {
 	}
 
 	if ctx.Query(Analytics) != "false" {
+		s.helper.Printer.Printf("GetReleaseShellScript from %s\n", ctx.IP())
 		analytics.Event(ctx.IP(), "release_shell", map[string]string{"release_name": releaseName})
 	}
 
@@ -163,6 +164,7 @@ func (s *Server) GetReleaseShellScript(ctx *fiber.Ctx) error {
 // GetLatestReleaseName returns the name of the latest release
 func (s *Server) GetLatestReleaseName(ctx *fiber.Ctx) error {
 	if ctx.Query(Analytics) != "false" {
+		s.helper.Printer.Printf("GetLatestReleaseName from %s\n", ctx.IP())
 		analytics.Event(ctx.IP(), "latest_release_name")
 	}
 	latestReleaseName := s.cache.GetLatestReleaseName()
@@ -176,6 +178,7 @@ func (s *Server) GetLatestReleaseName(ctx *fiber.Ctx) error {
 // ListReleaseNames returns a list of all available release names
 func (s *Server) ListReleaseNames(ctx *fiber.Ctx) error {
 	if ctx.Query(Analytics) != "false" {
+		s.helper.Printer.Printf("ListReleaseNames from %s\n", ctx.IP())
 		analytics.Event(ctx.IP(), "list_release_names")
 	}
 	res := getListReleaseNamesResponse()
@@ -197,6 +200,7 @@ func (s *Server) GetChecksum(ctx *fiber.Ctx) error {
 	}
 
 	if ctx.Query(Analytics) != "false" {
+		s.helper.Printer.Printf("GetChecksum from %s\n", ctx.IP())
 		analytics.Event(ctx.IP(), "checksum", map[string]string{
 			"release_name": releaseName,
 			"os":           os,
@@ -221,6 +225,7 @@ func (s *Server) GetReleaseArtifact(ctx *fiber.Ctx) error {
 		}
 
 		if ctx.Query(Analytics) != "false" {
+			s.helper.Printer.Printf("GetReleaseArtifact from %s\n", ctx.IP())
 			analytics.Event(ctx.IP(), "release_artifact", map[string]string{
 				"release_name": releaseName,
 				"os":           os,
@@ -239,6 +244,7 @@ func (s *Server) GetReleaseArtifact(ctx *fiber.Ctx) error {
 	}
 
 	if ctx.Query(Analytics) != "false" {
+		s.helper.Printer.Printf("GetReleaseArtifact from %s\n", ctx.IP())
 		analytics.Event(ctx.IP(), "release_artifact", map[string]string{
 			"release_name": releaseName,
 			"os":           os,

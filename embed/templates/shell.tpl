@@ -163,6 +163,7 @@ start() {
   releaseName="{{release_name}}"
   prefix="{{prefix}}"
   binary="{{binary}}"
+  analytics="{{analytics}}"
 
   install=${INSTALL:-"/usr/local/bin"}
   tmpDir="$(mktmpdir)"
@@ -170,7 +171,7 @@ start() {
 
   echo
   log_info "Downloading Release $releaseName for $os $arch"
-  http_download $tmp "$prefix://$domain/$releaseName/$os/$arch"
+  http_download $tmp "$prefix://$domain/$releaseName/$os/$arch?analytics=$analytics"
 
   if [ -w "$install" ]; then
     log_info "Installing $binary to $install"

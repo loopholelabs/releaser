@@ -32,8 +32,6 @@ func init() {
 	if p != nil {
 		handler = p
 		fmt.Printf("PostHog Analytics are enabled\n")
-	} else {
-		fmt.Printf("WARNING: PostHog Analytics are disabled\n")
 	}
 }
 

@@ -27,11 +27,13 @@ import (
 	"github.com/loopholelabs/releaser/embed"
 	"github.com/loopholelabs/releaser/internal/config"
 	"github.com/loopholelabs/releaser/internal/utils"
+	"github.com/loopholelabs/releaser/internal/log"
 	"github.com/loopholelabs/releaser/pkg/cache"
 	"github.com/valyala/fasttemplate"
 	"net"
 	"strings"
 	"time"
+	"regexp"
 )
 
 const (
@@ -220,6 +222,15 @@ func (s *Server) GetReleaseArtifact(ctx *fiber.Ctx) error {
 	arch := ctx.Params("arch")
 
 	if s.cache.GetLatestReleaseName() == releaseName {
+               // checks for anything but "v" / numerics / ".",
+               regex, err := regexp.Compile(`^[^a-zA-Z]*[vV][^a-zA-Z]*$`)
+               if err != nil {
+                 return err
+               }
+               if !regex.MatchString(releaseName) {
+                 log.Logger.Error().Msg("Serving possible non-production builds")
+               }
+
 		artifactBytes := s.cache.GetLatestReleaseArtifact(os, arch)
 		if artifactBytes == nil {
 			return ctx.Status(fiber.StatusNotFound).SendString("release not found")

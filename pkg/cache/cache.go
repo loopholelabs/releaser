@@ -25,6 +25,7 @@ import (
 	"github.com/loopholelabs/releaser/internal/config"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -172,6 +173,16 @@ func (c *Cache) doUpdate() error {
 
 	for _, release := range releases {
 		releaseName := strings.ToLower(release.GetName())
+
+		// checks for anything but "v" + numerics, for example v0.1.7-dev12, v0.1.7-pre10, etc
+		regex, err := regexp.Compile(`^[^a-zA-Z]*[vV][^a-zA-Z]*$`)
+		if err != nil {
+			return err
+		}
+
+		if !regex.MatchString(releaseName) {
+			continue
+		}
 		releaseNames[releaseName] = struct{}{}
 		for _, asset := range release.Assets {
 			assetID := asset.GetID()

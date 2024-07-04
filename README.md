@@ -24,5 +24,6 @@ Everyone interacting in the Releaser project’s codebases, issue trackers, chat
 
 ## Project Managed By:
 [![https://loopholelabs.io][LOOPHOLELABS]](https://loopholelabs.io)
+
 [GITREPO]: https://github.com/loopholelabs/releaser
 [LOOPHOLELABS]: https://cdn.loopholelabs.io/loopholelabs/LoopholeLabsLogo.svg

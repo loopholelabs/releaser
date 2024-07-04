@@ -23,7 +23,7 @@ Coming Soon.
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at [https://github.com/loopholelabs/releaser][GITREPO]. For more contribution information check out [the contribution guide](https://github.com/loopholelabs/releaser/blob/master/CONTRIBUTING.md).
+Bug reports and pull requests are welcome on GitHub at [https://github.com/loopholelabs/releaser][GITREPO]. For more contribution information check out [the contribution guide](https://github.com/loopholelabs/releaser/blob/main/CONTRIBUTING.md).
 
 
 ## License
@@ -32,7 +32,7 @@ The Releaser project is available as open source under the terms of the [Apache 
 
 ## Code of Conduct
 
-Everyone interacting in the Releaser project’s codebases, issue trackers, chat rooms and mailing lists is expected to follow the [CNCF Code of Conduct](https://github.com/cncf/foundation/blob/master/code-of-conduct.md).
+Everyone interacting in the Releaser project’s codebases, issue trackers, chat rooms and mailing lists is expected to follow the [CNCF Code of Conduct](https://github.com/cncf/foundation/blob/main/code-of-conduct.md).
 
 
 ## Project Managed By:

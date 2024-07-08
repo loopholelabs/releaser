@@ -7,7 +7,7 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/gofiber/helmet/v2 v2.2.26
 	github.com/google/go-github/v55 v55.0.0
-	github.com/loopholelabs/cmdutils v0.1.4
+	github.com/loopholelabs/cmdutils v0.1.5
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/posthog/posthog-go v0.0.0-20230801140217-d607812dee69
@@ -23,10 +23,10 @@ require (
 	github.com/AlecAivazis/survey/v2 v2.3.7 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20230923063757-afb1ddc0824c // indirect
 	github.com/andybalholm/brotli v1.0.6 // indirect
-	github.com/briandowns/spinner v1.23.0 // indirect
+	github.com/briandowns/spinner v1.23.1 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/fatih/color v1.15.0 // indirect
+	github.com/fatih/color v1.17.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
@@ -64,6 +64,5 @@ require (
 	golang.org/x/text v0.15.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
